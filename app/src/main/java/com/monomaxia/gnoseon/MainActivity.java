@@ -555,10 +555,13 @@ public class MainActivity extends Activity {
     }
 
 
+    private boolean lastChanceIntroShown = false;
+
     private void showCheeseBoard() {
         if(cheese.phase.equals("winner")){showCheeseWinner(cheese.winner);return;}
         if(cheese.phase.equals("sudden")){currentTeam=cheese.turn;showSuddenDeathIntro();return;}
         if(cheese.phase.equals("last")){showLastDance();return;}
+        lastChanceIntroShown = false;
         applyTheme(prefs.getString("theme",THEME_LIGHT));currentTeam=cheese.turn;
         LinearLayout root=baseColumn();
         root.addView(gameTopBar(false));
@@ -713,7 +716,7 @@ public class MainActivity extends Activity {
         LinearLayout root=baseColumn();root.setPadding(dp(18),dp(10),dp(18),dp(12));
         root.addView(gameTopBar(false));
         if (cheese.phase.equals("last") || cheese.attacking)
-            root.addView(sectionTitle(cheese.phase.equals("last")?"LAST DANCE":"ΣΑΜΠΟΤΑΖ"),fullMargins(0,2,0,6));
+            root.addView(sectionTitle(cheese.phase.equals("last")?"ΤΕΛΕΥΤΑΙΑ ΕΥΚΑΙΡΙΑ":"ΣΑΜΠΟΤΑΖ"),fullMargins(0,2,0,6));
         root.addView(cheeseScores(),fullMargins(0,6,0,8));
         Category category=categoryById(q.category);
         root.addView(categoryPill(category),centeredWrapMargins(0,0,0,10));
@@ -771,13 +774,25 @@ public class MainActivity extends Activity {
         applyTheme(prefs.getString("theme", THEME_LIGHT));currentTeam=cheese.turn;
         LinearLayout root=baseColumn();root.setPadding(dp(20),dp(20),dp(20),dp(28));
         root.addView(gameTopBar(false));
-        root.addView(text("LAST DANCE",38,modeAccent(GameMode.CHEESE),true),fullMargins(0,8,0,12));
+        root.addView(text("ΤΕΛΕΥΤΑΙΑ ΕΥΚΑΙΡΙΑ",38,modeAccent(GameMode.CHEESE),true),fullMargins(0,8,0,12));
         root.addView(cheeseScores(),fullMargins(0,0,0,20));
         addCheeseGrid(root,true);
-        Button decline=button("ΠΑΡΑΙΤΗΣΗ ΑΠΟ ΤΟ LAST DANCE",CARD,MUTED);
+        Button decline=button("ΠΑΡΑΙΤΗΣΗ ΑΠΟ ΤΗΝ ΤΕΛΕΥΤΑΙΑ ΕΥΚΑΙΡΙΑ",CARD,MUTED);
         decline.setOnClickListener(v->new AlertDialog.Builder(this).setMessage("Ο αντίπαλος θα κερδίσει την παρτίδα. Συνέχεια;").setNegativeButton("Πίσω",null).setPositiveButton("Ναι",(d,w)->{cheese.declineLastDance();showCheeseWinner(cheese.winner);}).show());
         root.addView(decline,fullMargins(0,18,0,0));
         setScrollable(root);tensionShake(root);
+        if (!lastChanceIntroShown) {
+            lastChanceIntroShown = true;
+            TextView notice = text("ΤΕΛΕΥΤΑΙΑ ΕΥΚΑΙΡΙΑ!\n\nΗ αντίπαλη ομάδα έφτασε τα 4 τυριά. Έχεις μία τελευταία ευκαιρία να τη σταματήσεις!\n\nΔιάλεξε μία από τις κατηγορίες που κατέκτησε και απάντησε σωστά για να της αφαιρέσεις ένα τυρί. Αν απαντήσεις λάθος, η αντίπαλη ομάδα κερδίζει.\n\nΠΑΤΗΣΕ ΟΠΟΥΔΗΠΟΤΕ ΓΙΑ ΣΥΝΕΧΕΙΑ", 19, TEXT, true);
+            notice.setGravity(Gravity.CENTER);
+            notice.setPadding(dp(22),dp(28),dp(22),dp(28));
+            notice.setBackground(round(CARD,modeAccent(GameMode.CHEESE),2,radius()));
+            final AlertDialog popup = new AlertDialog.Builder(this).setView(notice).create();
+            popup.setCanceledOnTouchOutside(false);
+            notice.setOnClickListener(v -> popup.dismiss());
+            popup.show();
+            popup.getWindow().getDecorView().setOnClickListener(v -> popup.dismiss());
+        }
     }
 
     private void showCheeseWinner(int team){
@@ -1052,7 +1067,7 @@ public class MainActivity extends Activity {
         } else {
             root.addView(instructionSection("4 Τυριά", "Με δύο σωστές απαντήσεις η ομάδα κατακτά την κατηγορία. Όποια ομάδα αποκτήσει τέσσερις κατηγορίες κερδίζει.", modeAccent(GameMode.CHEESE)));
             root.addView(instructionSection("Σαμποτάζ", "Κάθε ομάδα έχει μία χρήση. Μια σωστή απάντηση μειώνει κατά ένα την πρόοδο του αντιπάλου.", BORDER));
-            root.addView(instructionSection("Last Dance", "Πριν από τη νίκη στα τέσσερα τυριά μπορεί να δοθεί τελευταία ευκαιρία Σαμποτάζ. Στο 3–3 ακολουθεί Ξαφνικός Θάνατος.", BORDER));
+            root.addView(instructionSection("Τελευταία Ευκαιρία", "Πριν από τη νίκη στα τέσσερα τυριά μπορεί να δοθεί τελευταία ευκαιρία Σαμποτάζ. Στο 3–3 ακολουθεί Ξαφνικός Θάνατος.", BORDER));
         }
         setStaticScreen(root);
     }
@@ -3653,7 +3668,7 @@ public class MainActivity extends Activity {
                 canvas.rotate(angle + 90f, tx, ty);
                 textPaint.setColor(suddenModeColor(mode));
                 textPaint.setTextSize(dp(("multiple".equals(mode) || "ab".equals(mode) || "closest".equals(mode)) ? 8 : 10));
-                String[] lines = suddenModeWheelLabel(mode).split("\\n");
+                String[] lines = suddenModeWheelLabel(mode).split("\n");
                 for (int line = 0; line < lines.length; line++) {
                     canvas.drawText(lines[line], tx, ty + (line - (lines.length - 1) / 2f) * dp(12), textPaint);
                 }
@@ -4184,7 +4199,7 @@ public class MainActivity extends Activity {
 
     private TextView turnBanner(String name, int team) {
         int accent = teamAccent(team);
-        TextView t = pill("ΠΑΙΖΕΙ Η " + name.toUpperCase(java.util.Locale.forLanguageTag("el")),
+        TextView t = pill(name.toUpperCase(java.util.Locale.forLanguageTag("el")),
                 accent, teamTint(team), softOutline(accent));
         t.setPadding(dp(12),dp(7),dp(12),dp(7));
         t.setGravity(Gravity.CENTER);

@@ -27,10 +27,10 @@ the questions aloud. It works fully offline: no account, no ads, no permissions.
   **Κλοπή** (steal a missed question), one **Ανακάτεμα** (reshuffle the category choice) and one
   **Αλλαγή ερώτησης** (swap the question).
 
-- **🧀 4 Τυριά (Four Cheeses)**: two correct answers in a category win that category's cheese; the
-  first team to four cheeses wins. Each team has one **Σαμποτάζ**, which knocks a step off an
-  opponent's progress, and the trailing team gets a **Last Dance** sabotage chance before a win.
-  At 3–3 it goes to Sudden Death.
+- **🧀 4 Τυριά (Four Cheeses)**: teams alternate after every question; two correct answers in a
+  category win that category's cheese, and the first team to four cheeses wins. Each team has one
+  **Σαμποτάζ**, which knocks a step off an opponent's progress, and the trailing team gets a
+  **Τελευταία Ευκαιρία** (last chance) to sabotage before a win. At 3–3 it goes to Sudden Death.
 
 - **🔪 Sudden Death**: breaks ties with a roulette of quick challenges: true/false, multiple choice,
   over/under, A/B, or closest number.
@@ -134,6 +134,9 @@ build-preview.sh                           Gradle-free build script
 ```
 
 ## Version
+
+**0.11.10** (version code 34): 4 Τυριά turns alternate after every question, "Last Dance" is now
+**Τελευταία Ευκαιρία** with an explanatory popup, and the turn banner shows only the team name.
 
 **0.11.9** (version code 33): the 0.11.8 redesign (poster home screen, 4 Τυριά, ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ,
 team colours, new icon) and its follow-up polish (Μονομαχία renamed Σπέσιαλ, TOP 5 worth 3/2,

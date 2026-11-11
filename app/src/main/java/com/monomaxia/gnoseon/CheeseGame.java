@@ -33,11 +33,14 @@ public final class CheeseGame {
             }
             turn=1-turn;
         } else {
-            if(correct)progress[turn][category]++;
-            else turn=1-turn;
-            if(count(turn)>=4) {
-                if(sabotage[1-turn]) { lastLeader=turn;turn=1-turn;phase="last"; }
-                else {winner=turn;phase="winner";}
+            int answeringTeam=turn;
+            if(correct)progress[answeringTeam][category]++;
+            if(count(answeringTeam)>=4) {
+                if(sabotage[1-answeringTeam]) { lastLeader=answeringTeam;turn=1-answeringTeam;phase="last"; }
+                else {winner=answeringTeam;phase="winner";}
+            } else {
+                // Alternate teams after every normal question, even a correct answer.
+                turn=1-answeringTeam;
             }
         }
         if(count(0)==3 && count(1)==3)phase="sudden";
