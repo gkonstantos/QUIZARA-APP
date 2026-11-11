@@ -5,6 +5,7 @@ Usage (from the project root):
     python tools/excel_to_json.py "<folder with the .xlsx files>"
 
 Writes app/src/main/assets/{classic_questions,questions,duel_specials,sudden_death}.json.
+If there is no CONNECTION file, the ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ questions already in duel_specials.json are kept.
 Requires: pip install openpyxl
 """
 import collections
@@ -32,7 +33,9 @@ CATEGORY_FILES = [
 ]
 # Special / sudden-death files: filename keyword -> builder key.
 SPECIAL_FILES = {'TOP5': 'top5', 'FIND3': 'find3', 'PERSON_ID': 'person_id',
-                 'COUNTRY_ID': 'country_id', 'RANK': 'rank'}
+                 'COUNTRY_ID': 'country_id', 'RANK': 'rank', 'CONNECTION': 'connection'}
+SPECIAL_TYPES = ('top5', 'find3', 'person_id', 'country_id', 'rank', 'connection')
+CONNECTION_PROMPT = 'Τι συνδέει τα παρακάτω;\n\n'
 SUDDEN_FILES = {'TF_SUDDEN': 'tf', 'MC_SUDDEN': 'multiple', 'OU_SUDDEN': 'over_under',
                 'AB_SUDDEN': 'ab', 'CLOSEST_SUDDEN': 'closest'}
 
@@ -116,6 +119,14 @@ def build_special(path, kind, out):
                 warnings.append('rank %s: %d items (duplicates?)' % (sid, len(items)))
             out.append({'id': sid, 'type': 'rank', 'title': 'ΒΑΛΤΑ ΣΕ ΣΕΙΡΑ', 'prompt': prompt,
                         'items': list(items), 'correctOrder': list(items), 'explanation': expl})
+        elif kind == 'connection':
+            # Columns: Κλειδί | Στοιχεία (e.g. "Ερμής · Αφροδίτη · Γη") | Σύνδεση | Επεξήγηση
+            answer = cell(r, 2)
+            if not prompt or not answer:
+                warnings.append('connection %s: missing items or answer' % sid)
+            out.append({'id': sid, 'type': 'connection', 'title': 'ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ',
+                        'prompt': CONNECTION_PROMPT + prompt, 'answers': [answer] if answer else [],
+                        'explanation': cell(r, 3)})
 
 
 def build_sudden(path, kind, out):
@@ -188,12 +199,19 @@ def main():
             build_sudden(path, key, sudden)
         else:
             warnings.append('ignored file: ' + name)
+    if not any(e['type'] == 'connection' for e in specials):
+        current = os.path.join(ASSETS, 'duel_specials.json')
+        if os.path.exists(current):
+            with open(current, encoding='utf-8') as f:
+                kept = [e for e in json.load(f) if e.get('type') == 'connection']
+            specials.extend(kept)
+            warnings.append('no CONNECTION file: kept the %d connection questions already in the app' % len(kept))
     dedupe_ids(specials)
     dedupe_ids(sudden)
 
     # The app refuses to start without these minimums.
     by_special = collections.Counter(e['type'] for e in specials)
-    for t in ('top5', 'find3', 'person_id', 'country_id', 'rank'):
+    for t in SPECIAL_TYPES:
         if by_special[t] < 2:
             sys.exit('ERROR: need at least 2 "%s" specials, found %d' % (t, by_special[t]))
     if len(classic) < 36:

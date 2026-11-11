@@ -117,21 +117,20 @@ public class MainActivity extends Activity {
     // Single source of truth for category symbols across every mode and screen.
     private static final Category[] CATEGORIES = new Category[]{
             new Category("sports", "⚽", "Αθλητικά"),
-            new Category("art", "🎨", "Τέχνη"),
+            new Category("art", "🎨", "Τέχνες"),
             new Category("science", "⚛", "Επιστήμη"),
             new Category("history", "🏛", "Ιστορία"),
             new Category("general", "🧠", "Γενικές"),
             new Category("geography", "🌐", "Γεωγραφία")
     };
 
-    // The Duel board: one question per category x difficulty, dealt from questionPool each game.
     private final List<Question> questions = new ArrayList<>();
+    private final List<Question> questionBank = new ArrayList<>();
+    private final List<Integer> duelSelection = new ArrayList<>();
     private final Map<String, Question> questionMap = new HashMap<>();
-    // Every Duel question from questions.json.
-    private final List<Question> questionPool = new ArrayList<>();
+    private final Set<String> used = new HashSet<>();
     // Sounds are prepared off the UI thread: creating a ToneGenerator/MediaPlayer can block for seconds.
     private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
-    private final Set<String> used = new HashSet<>();
     private final List<SuddenQuestion> suddenQuestions = new ArrayList<>();
 
     // Duel special questions. Every enabled type contributes two selectable plays to the shared board.
@@ -153,6 +152,12 @@ public class MainActivity extends Activity {
     private static final String DEFAULT_TEAM_B = "Ομάδα 2";
     private String teamA = DEFAULT_TEAM_A;
     private String teamB = DEFAULT_TEAM_B;
+    // Six primary team colors: red, orange, yellow, green, blue and purple.
+    private int teamColorA = 4;
+    private int teamColorB = 1;
+    private final LinearLayout[] liveSwatches = new LinearLayout[2];
+    private final LinearLayout[] liveTeamCards = new LinearLayout[2];
+    private final TextView[] liveTeamTitles = new TextView[2];
     private int scoreA = 0;
     private int scoreB = 0;
     private int currentTeam = 0;
@@ -197,7 +202,7 @@ public class MainActivity extends Activity {
     private final Set<String> suddenUsedQuestionIds = new HashSet<>();
 
     // Game modes. v0.8 activates Classic while keeping Duel unchanged.
-    private enum GameMode { DUEL, CLASSIC }
+    private enum GameMode { DUEL, CLASSIC, CHEESE }
     private GameMode gameMode = GameMode.DUEL;
 
     // Tie behavior is chosen only when the match actually ends tied.
@@ -269,14 +274,18 @@ public class MainActivity extends Activity {
         // Older Minimal themes are migrated to the corresponding supported theme.
         if ("minimal".equals(theme) || "minimal_light".equals(theme)) theme = THEME_LIGHT;
         if ("minimal_dark".equals(theme)) theme = THEME_DARK;
-        earlyFinishEnabled = prefs.getBoolean("early_finish", true);
-        classicStealEnabled = prefs.getBoolean("classic_steal_enabled", true);
+        // Mathematical end and Classic steal are permanent game rules.
+        earlyFinishEnabled = true;
+        classicStealEnabled = true;
+        teamColorA = Math.max(0, Math.min(5, prefs.getInt("team_color_a", 4)));
+        teamColorB = Math.max(0, Math.min(5, prefs.getInt("team_color_b", 1)));
+        if (teamColorA == teamColorB) teamColorB = (teamColorA + 1) % 6;
         tieRule = "draw".equals(prefs.getString("tie_rule_default", "sudden_death")) ? TieRule.DRAW : TieRule.SUDDEN_DEATH;
         questionTimerSeconds = prefs.getInt("question_timer_seconds", 0);
         if (questionTimerSeconds != 0 && questionTimerSeconds != 30 && questionTimerSeconds != 45 && questionTimerSeconds != 60) {
             questionTimerSeconds = 0;
         }
-        effectsEnabled = prefs.getBoolean("effects", true);
+        effectsEnabled = true;
         // One master Effects switch controls all sensory/game-show feedback.
         revealEnabled = effectsEnabled;
         finalQuestionEnabled = effectsEnabled;
@@ -287,42 +296,42 @@ public class MainActivity extends Activity {
     private void applyTheme(String selected) {
         theme = selected;
         if (THEME_DARK.equals(selected)) {
-            BG = Color.rgb(13, 19, 25);
-            CARD = Color.rgb(22, 30, 38);
+            BG = Color.rgb(13, 13, 17);
+            CARD = Color.rgb(31, 29, 36);
             TEXT = Color.rgb(244, 247, 249);
             MUTED = Color.rgb(155, 168, 179);
-            BORDER = Color.rgb(45, 58, 69);
-            BLUE = Color.rgb(53, 166, 244);
-            BLUE_SOFT = Color.rgb(19, 48, 67);
-            RED = Color.rgb(239, 80, 62);
-            RED_SOFT = Color.rgb(66, 27, 25);
-            GREEN = Color.rgb(55, 177, 99);
-            GREEN_SOFT = Color.rgb(22, 57, 37);
-            ORANGE = Color.rgb(239, 153, 38);
-            ORANGE_SOFT = Color.rgb(64, 44, 18);
-            YELLOW = Color.rgb(230, 188, 49);
-            YELLOW_SOFT = Color.rgb(66, 54, 20);
-            PURPLE = Color.rgb(174, 119, 255);
-            PURPLE_SOFT = Color.rgb(48, 36, 66);
-            CYAN = Color.rgb(61, 189, 229);
-            CYAN_SOFT = Color.rgb(23, 60, 72);
-            TEAL = Color.rgb(53, 184, 170);
-            TEAL_SOFT = Color.rgb(22, 61, 57);
-            MAGENTA = Color.rgb(224, 108, 168);
-            MAGENTA_SOFT = Color.rgb(74, 35, 55);
+            BORDER = Color.rgb(73, 70, 79);
+            BLUE = Color.rgb(155, 187, 230);
+            BLUE_SOFT = Color.rgb(34, 40, 49);
+            RED = Color.rgb(220, 160, 166);
+            RED_SOFT = Color.rgb(47, 35, 40);
+            GREEN = Color.rgb(155, 206, 172);
+            GREEN_SOFT = Color.rgb(32, 43, 38);
+            ORANGE = Color.rgb(235, 187, 148);
+            ORANGE_SOFT = Color.rgb(47, 39, 34);
+            YELLOW = Color.rgb(222, 199, 141);
+            YELLOW_SOFT = Color.rgb(46, 43, 35);
+            PURPLE = Color.rgb(197, 161, 226);
+            PURPLE_SOFT = Color.rgb(42, 35, 48);
+            CYAN = Color.rgb(151, 204, 216);
+            CYAN_SOFT = Color.rgb(34, 44, 48);
+            TEAL = Color.rgb(143, 207, 194);
+            TEAL_SOFT = Color.rgb(33, 44, 43);
+            MAGENTA = Color.rgb(225, 168, 200);
+            MAGENTA_SOFT = Color.rgb(46, 36, 44);
         } else {
-            BG = Color.rgb(250, 249, 247);
-            CARD = Color.rgb(255, 255, 255);
-            TEXT = Color.rgb(40, 47, 56);
+            BG = Color.rgb(255, 246, 232);
+            CARD = Color.rgb(255, 249, 239);
+            TEXT = Color.rgb(18, 18, 17);
             MUTED = Color.rgb(143, 145, 147);
             BORDER = Color.rgb(224, 221, 217);
-            BLUE = Color.rgb(49, 125, 201);
+            BLUE = Color.rgb(0, 49, 211);
             BLUE_SOFT = Color.rgb(238, 246, 253);
-            RED = Color.rgb(211, 75, 54);
+            RED = Color.rgb(235, 76, 0);
             RED_SOFT = Color.rgb(253, 242, 239);
             GREEN = Color.rgb(46, 156, 92);
             GREEN_SOFT = Color.rgb(237, 249, 242);
-            ORANGE = Color.rgb(226, 146, 42);
+            ORANGE = Color.rgb(255, 81, 0);
             ORANGE_SOFT = Color.rgb(254, 247, 235);
             YELLOW = Color.rgb(223, 185, 62);
             YELLOW_SOFT = Color.rgb(255, 250, 236);
@@ -354,7 +363,9 @@ public class MainActivity extends Activity {
     }
 
     private void loadQuestions() throws Exception {
-        questionPool.clear();
+        questionBank.clear();
+        questions.clear();
+        questionMap.clear();
         StringBuilder sb = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
                 getAssets().open("questions.json"), StandardCharsets.UTF_8))) {
@@ -375,29 +386,38 @@ public class MainActivity extends Activity {
                     o.getInt("correctIndex"),
                     o.optString("explanation", "")
             );
-            questionPool.add(q);
+            questionBank.add(q);
         }
-        pickDuelBoard();
-        if (questions.size() != 18) throw new IllegalStateException("Λείπουν ερωτήσεις για κάποια κατηγορία ή δυσκολία.");
+        selectDuelQuestions();
         loadDuelSpecialQuestions();
         loadSuddenQuestions();
         loadClassicQuestions();
     }
 
-    // Deals a random question for every category x difficulty from the pool. The board must stay at
-    // one question per tile: maxReachForTeam() counts the remaining tiles from this list.
-    private void pickDuelBoard() {
-        questions.clear();
-        questionMap.clear();
-        List<Question> shuffled = new ArrayList<>(questionPool);
-        Collections.shuffle(shuffled);
-        for (Question q : shuffled) {
-            String k = key(q.category, q.multiplier);
-            if (!questionMap.containsKey(k)) {
-                questionMap.put(k, q);
-                questions.add(q);
+    private void selectDuelQuestions() {
+        duelSelection.clear();
+        for (Category c : CATEGORIES) for (int m=1;m<=3;m++) {
+            List<Integer> pool=new ArrayList<>();
+            for(int i=0;i<questionBank.size();i++) {
+                Question q=questionBank.get(i);
+                if(q.category.equals(c.id)&&q.multiplier==m)pool.add(i);
             }
+            if(pool.isEmpty())throw new IllegalStateException("Δεν υπάρχουν ερωτήσεις: "+c.name);
+            Collections.shuffle(pool);duelSelection.add(pool.get(0));
         }
+        rebuildDuelMap();
+    }
+
+    private void restoreDuelQuestions(JSONArray saved)throws Exception {
+        if(saved.length()!=18)throw new IllegalStateException("Invalid saved question selection");
+        duelSelection.clear();for(int i=0;i<saved.length();i++)duelSelection.add(saved.getInt(i));
+        rebuildDuelMap();
+        if(questionMap.size()!=18)throw new IllegalStateException("Invalid saved question board");
+    }
+
+    private void rebuildDuelMap() {
+        questions.clear();questionMap.clear();
+        for(int i:duelSelection){Question q=questionBank.get(i);questions.add(q);questionMap.put(key(q.category,q.multiplier),q);}
     }
 
     private void loadDuelSpecialQuestions() throws Exception {
@@ -416,7 +436,7 @@ public class MainActivity extends Activity {
             specialQuestions.add(q);
             specialQuestionById.put(q.id, q);
         }
-        String[] required = new String[]{"top5", "find3", "person_id", "country_id", "rank"};
+        String[] required = new String[]{"top5", "find3", "person_id", "country_id", "rank", "connection"};
         for (String type : required) {
             int count = 0;
             for (SpecialQuestion q : specialQuestions) if (type.equals(q.type)) count++;
@@ -485,126 +505,543 @@ public class MainActivity extends Activity {
         }
     }
 
-    // ---------- HOME / SETUP ----------
+    private CheeseGame cheese = new CheeseGame();
+    private String cheeseQuestionId = "";
+    private boolean cheeseRevealed = false;
+    private boolean cheeseAttackSelected = false;
+    private final Set<String> cheeseUsed = new HashSet<>();
+    private final List<Integer> cheeseDifficultyBag = new ArrayList<>();
+    private final Set<Integer> cheeseDifficulties = new HashSet<>(java.util.Arrays.asList(1,2,3));
+    private static final String[] CHEESE_IDS = {"history", "geography", "science", "art", "sports", "general"};
 
-    private void showHome() {
-        settingsSource = ScreenSource.HOME;
-        LinearLayout root = baseColumn();
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-
-        ImageView logo = new ImageView(this);
-        logo.setImageResource(isDarkTheme() ? com.monomaxia.gnoseon.R.drawable.kouizara_emblem_dark : com.monomaxia.gnoseon.R.drawable.kouizara_emblem_light);
-        logo.setAdjustViewBounds(true);
-        logo.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        logo.setContentDescription("ΚΟΥΙΖΑΡΑ");
-        root.addView(logo, fullMargins(28, 0, 28, 0));
-        LinearLayout.LayoutParams logoLp = (LinearLayout.LayoutParams) logo.getLayoutParams();
-        logoLp.height = dp(isDarkTheme() ? 205 : 215);
-        logo.setLayoutParams(logoLp);
-
-        TextView homeBrand = gameBrandTitle();
-        homeBrand.setTextSize(42);
-        root.addView(homeBrand, fullMargins(8, -4, 8, 0));
-        TextView tagline = text("ΣΚΕΦΤΟΜΑΙ, ΚΟΥΙΖΑΡΑ ΥΠΑΡΧΩ", 12, MUTED, true);
-        tagline.setGravity(Gravity.CENTER);
-        root.addView(tagline, fullMargins(8, 0, 8, 14));
-
-        if (gameActive) {
-            String resumeMode = gameMode == GameMode.CLASSIC ? "Κλασικό" : "Μονομαχία";
-            String resumeProgress = gameMode == GameMode.CLASSIC
-                    ? classicTotal(0) + "/" + classicGoalTotal() + " — " + classicTotal(1) + "/" + classicGoalTotal()
-                    : answered + "/" + totalDuelQuestions() + " ερωτήσεις";
-            Button resume = primaryButton("▶  ΣΥΝΕΧΙΣΕ ΤΟ ΠΑΙΧΝΙΔΙ\n" + resumeMode + " · " + resumeProgress, GREEN);
-            resume.setTextSize(16);
-            resume.setMinHeight(dp(66));
-            resume.setOnClickListener(v -> resumeSavedGame());
-            root.addView(resume, fullMargins(14, 0, 14, 10));
-        }
-
-        Button play = primaryButton("▶  ΠΑΙΞΕ", GREEN);
-        play.setTextSize(20);
-        play.setMinHeight(dp(64));
-        play.setOnClickListener(v -> {
-            if (gameActive) confirmDiscardThen(() -> {
-                clearSavedGame();
-                resetTeamNamesToDefault();
-                showModeSelect();
+    private void showCheeseSetup() {
+        applyTheme(prefs.getString("theme",THEME_LIGHT));
+        LinearLayout root=baseColumn();
+        root.addView(topBar(true,false));
+        root.addView(sectionTitle("ΡΥΘΜΙΣΕΙΣ ΟΜΑΔΩΝ"),fullMargins(0,12,0,12));
+        EditText a=teamInput(teamA), b=teamInput(teamB);
+        root.addView(teamColorSettings(a,b),fullMargins(2,0,2,20));
+        root.addView(sectionTitle("Δυσκολίες παρτίδας"),fullMargins(0,12,0,7));
+        final boolean[] selected={true,true,true};
+        LinearLayout difficultyList=new LinearLayout(this);
+        difficultyList.setOrientation(LinearLayout.VERTICAL);
+        for(int i=0;i<3;i++){
+            final int idx=i, level=i+1;
+            Button choice=button("",CARD,TEXT);
+            choice.setMinHeight(dp(54));
+            styleClassicDifficultyToggle(choice,level,true);
+            choice.setOnClickListener(v->{
+                int count=(selected[0]?1:0)+(selected[1]?1:0)+(selected[2]?1:0);
+                if(selected[idx]&&count==1){Toast.makeText(this,"Τουλάχιστον μία δυσκολία",Toast.LENGTH_SHORT).show();return;}
+                selected[idx]=!selected[idx];
+                styleClassicDifficultyToggle(choice,level,selected[idx]);
             });
-            else {
-                resetTeamNamesToDefault();
-                showModeSelect();
-            }
+            difficultyList.addView(choice,fullMargins(3,3,3,3));
+        }
+        root.addView(difficultyList);
+        Button start=modeStartButton(GameMode.CHEESE);
+        start.setOnClickListener(v -> {
+            teamA=cleanName(a.getText().toString(),DEFAULT_TEAM_A);
+            teamB=cleanName(b.getText().toString(),DEFAULT_TEAM_B);
+            cheese=new CheeseGame();cheeseUsed.clear();cheeseDifficultyBag.clear();
+            cheeseDifficulties.clear();for(int i=0;i<3;i++)if(selected[i])cheeseDifficulties.add(i+1);
+            cheeseQuestionId="";cheeseRevealed=false;cheeseAttackSelected=false;
+            gameMode=GameMode.CHEESE;gameActive=true;inSuddenDeath=false;suddenStarted=false;
+            activeQuestionKey="";activeClassicQuestionId="";activeSpecialId="";
+            scoreA=scoreB=0;saveGameState();showCheeseBoard();
         });
-        root.addView(play, fullMargins(14, 0, 14, 12));
-
-        Button settings = button("⚙  ΡΥΘΜΙΣΕΙΣ", CARD, TEXT);
-        settings.setBackground(round(CARD, ORANGE, 2, radius()));
-        settings.setMinHeight(dp(58));
-        settings.setOnClickListener(v -> {
-            settingsSource = ScreenSource.HOME;
-            showSettings();
-        });
-        root.addView(settings, fullMargins(14, 0, 14, 10));
-
-        Button instructions = button("☰  ΟΔΗΓΙΕΣ", CARD, TEXT);
-        instructions.setBackground(round(CARD, BLUE, 2, radius()));
-        instructions.setMinHeight(dp(56));
-        instructions.setOnClickListener(v -> showInstructions());
-        root.addView(instructions, fullMargins(14, 0, 14, 12));
-
+        root.addView(start,fullMargins(4,28,4,8));
         setStaticScreen(root);
     }
 
-    private void showInstructions() {
+
+    private void showCheeseBoard() {
+        if(cheese.phase.equals("winner")){showCheeseWinner(cheese.winner);return;}
+        if(cheese.phase.equals("sudden")){currentTeam=cheese.turn;showSuddenDeathIntro();return;}
+        if(cheese.phase.equals("last")){showLastDance();return;}
+        applyTheme(prefs.getString("theme",THEME_LIGHT));currentTeam=cheese.turn;
+        LinearLayout root=baseColumn();
+        root.addView(gameTopBar(false));
+        root.addView(cheeseScores(),fullMargins(4,4,4,10));
+        root.addView(turnBanner(cheese.turn==0?teamA:teamB,cheese.turn),centeredWrapMargins(0,0,0,8));
+        addCheeseGrid(root,false);
+        Button sabotage=button(cheeseAttackSelected?"✓  ΣΑΜΠΟΤΑΖ":"ΣΑΜΠΟΤΑΖ  ·  "+(cheese.sabotage[cheese.turn]?"1":"0"),CARD,TEXT);
+        sabotage.setBackground(round(CARD,modeAccent(GameMode.CHEESE),2,radius()));
+        sabotage.setEnabled(cheese.sabotage[cheese.turn]);
+        sabotage.setAlpha(sabotage.isEnabled()?1f:0.4f);
+        sabotage.setOnClickListener(v->{cheeseAttackSelected=!cheeseAttackSelected;showCheeseBoard();});
+        root.addView(sabotage,fullMargins(4,10,4,5));
+        saveGameState();setStaticScreen(root);
+    }
+
+
+    private View cheeseScores() { return cheeseScores(-1); }
+
+    private View cheeseScores(int winningTeam) {
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+        for(int t=0;t<2;t++) {
+            final int team=t;
+            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+            card.setGravity(Gravity.CENTER);card.setPadding(dp(5),dp(7),dp(5),dp(7));
+            boolean active=cheese.phase.equals("board") && t==cheese.turn;
+            card.setBackground(round(active?teamTint(t):CARD,teamAccent(t),active?3:1,radius()));
+            card.setElevation(dp(active?5:1));
+            TextView name=text((active?"▶  ":"")+(t==0?teamA:teamB),14,teamAccent(t),true);
+            applyAdaptiveText(name,10,14,true);card.addView(name);
+            int count=t==winningTeam?4:cheese.count(t);
+            TextView score=text(count+" / 4",26,TEXT,true);score.setGravity(Gravity.CENTER);card.addView(score);
+            TextView wedges=text("△  △  △  △",13,teamAccent(t),true);
+            wedges.setGravity(Gravity.CENTER);card.addView(wedges);
+            row.addView(card,weightedMargins(1,t==0?0:4,0,t==0?4:0,0));
+        }
+        return row;
+    }
+
+    /** Consistent line icons, drawn as vectors instead of device-dependent emoji glyphs. */
+    private View categoryGlyph(String id, int accent, int sizeDp) {
+        View glyph = new View(this) {
+            final Paint pen = new Paint(Paint.ANTI_ALIAS_FLAG);
+            void line(Canvas canvas, float x1,float y1,float x2,float y2) { canvas.drawLine(x1,y1,x2,y2,pen); }
+            @Override protected void onDraw(Canvas canvas) {
+                super.onDraw(canvas);
+                float scale=Math.min(getWidth(),getHeight())/48f;
+                canvas.save();canvas.translate((getWidth()-48*scale)/2f,(getHeight()-48*scale)/2f);canvas.scale(scale,scale);
+                pen.setColor(accent);pen.setStrokeWidth(2.8f);pen.setStrokeCap(Paint.Cap.ROUND);
+                pen.setStrokeJoin(Paint.Join.ROUND);pen.setStyle(Paint.Style.STROKE);
+                if("history".equals(id)) {
+                    line(canvas,8,12,40,12);line(canvas,12,9,36,9);line(canvas,8,38,40,38);
+                    for(int x=13;x<=35;x+=11){line(canvas,x,16,x,34);line(canvas,x-2,16,x+2,16);line(canvas,x-2,34,x+2,34);}
+                } else if("geography".equals(id)) {
+                    canvas.drawCircle(24,24,17,pen);canvas.drawOval(new RectF(17,7,31,41),pen);
+                    line(canvas,8,24,40,24);line(canvas,11,16,37,16);line(canvas,11,32,37,32);
+                } else if("science".equals(id)) {
+                    canvas.drawOval(new RectF(6,18,42,30),pen);
+                    canvas.save();canvas.rotate(60,24,24);canvas.drawOval(new RectF(6,18,42,30),pen);canvas.restore();
+                    canvas.save();canvas.rotate(-60,24,24);canvas.drawOval(new RectF(6,18,42,30),pen);canvas.restore();
+                    pen.setStyle(Paint.Style.FILL);canvas.drawCircle(24,24,3.5f,pen);
+                } else if("art".equals(id)) {
+                    canvas.drawOval(new RectF(8,10,39,39),pen);
+                    pen.setStyle(Paint.Style.FILL);
+                    for(int[] c:new int[][]{{18,17},{29,15},{32,25},{17,30}})canvas.drawCircle(c[0],c[1],2.5f,pen);
+                    pen.setStyle(Paint.Style.STROKE);canvas.drawArc(new RectF(23,27,39,40),-30,220,false,pen);
+                } else if("sports".equals(id)) {
+                    canvas.drawCircle(24,24,17,pen);canvas.drawCircle(24,24,7,pen);
+                    line(canvas,24,7,24,17);line(canvas,24,31,24,41);line(canvas,7,24,17,24);line(canvas,31,24,41,24);
+                } else {
+                    line(canvas,24,5,24,43);line(canvas,5,24,43,24);
+                    line(canvas,12,12,36,36);line(canvas,36,12,12,36);
+                    pen.setStyle(Paint.Style.FILL);canvas.drawCircle(24,24,4,pen);
+                }
+                canvas.restore();
+            }
+        };
+        glyph.setContentDescription(categoryById(id).name);
+        glyph.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp),dp(sizeDp)));
+        return glyph;
+    }
+
+    private void addCheeseGrid(LinearLayout root,boolean last) {
+        GridLayout grid=new GridLayout(this);grid.setColumnCount(2);
+        for(int c=0;c<6;c++){
+            final int category=c;Category cat=categoryById(CHEESE_IDS[c]);
+            boolean attack=last||cheeseAttackSelected;
+            int owner=cheese.owner(c);int accent=categoryAccent(cat);
+            LinearLayout tile=new LinearLayout(this);tile.setOrientation(LinearLayout.VERTICAL);
+            tile.setPadding(dp(10),dp(8),dp(10),dp(8));
+            tile.setBackground(round(CARD,accent,2,radius()));
+            LinearLayout heading = new LinearLayout(this);
+            heading.setGravity(Gravity.CENTER_VERTICAL);
+            heading.addView(categoryGlyph(cat.id,accent,30));
+            TextView name=text(cat.name.toUpperCase(java.util.Locale.forLanguageTag("el")),15,accent,true);
+            name.setPadding(dp(6),0,0,0);
+            heading.addView(name, new LinearLayout.LayoutParams(0,-2,1));
+            tile.addView(heading);
+            TextView a=text(teamA+"   "+cheese.progress[0][c]+"/2"+(owner==0?"  ◭":""),12,teamAccent(0),true);
+            TextView b=text(teamB+"   "+cheese.progress[1][c]+"/2"+(owner==1?"  ◭":""),12,teamAccent(1),true);
+            tile.addView(a,fullMargins(0,10,0,4));tile.addView(b);
+            boolean enabled=cheese.canPick(c,attack);tile.setAlpha(enabled?1f:0.45f);
+            tile.setEnabled(enabled);tile.setFocusable(enabled);
+            tile.setContentDescription(cat.name+", "+teamA+" "+cheese.progress[0][c]+" από 2, "+teamB+" "+cheese.progress[1][c]+" από 2"+(owner>=0?", κλειδωμένη":""));
+            tile.setOnClickListener(v->startCheeseQuestion(category,attack));attachPressAnimation(tile);
+            GridLayout.LayoutParams lp=new GridLayout.LayoutParams();lp.width=0;lp.height=dp(104);
+            lp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);lp.setMargins(dp(4),dp(4),dp(4),dp(4));
+            grid.addView(tile,lp);
+        }
+        root.addView(grid,new LinearLayout.LayoutParams(-1,-2));
+    }
+
+    private void startCheeseQuestion(int category,boolean attack) {
+        // Draw from a shuffled bag: each block of three questions has all difficulties.
+        if(cheeseDifficultyBag.isEmpty()){
+            cheeseDifficultyBag.addAll(cheeseDifficulties);
+            Collections.shuffle(cheeseDifficultyBag);
+        }
+        int difficulty=cheeseDifficultyBag.get(0);
+        List<ClassicQuestion> candidates=new ArrayList<>();
+        for(ClassicQuestion q:classicQuestions)if(q.category.equals(CHEESE_IDS[category])&&q.difficulty==difficulty&&!cheeseUsed.contains(q.id))candidates.add(q);
+        if(candidates.isEmpty())for(ClassicQuestion q:classicQuestions)if(q.category.equals(CHEESE_IDS[category])&&q.difficulty==difficulty)candidates.add(q);
+        if(candidates.isEmpty()){Toast.makeText(this,"Δεν υπάρχουν διαθέσιμες ερωτήσεις",Toast.LENGTH_SHORT).show();return;}
+        Collections.shuffle(candidates);ClassicQuestion q=candidates.get(0);
+        cheese.begin(category,attack);cheeseDifficultyBag.remove(0);cheeseUsed.add(q.id);
+        cheeseQuestionId=q.id;cheeseRevealed=false;cheeseAttackSelected=false;currentTeam=cheese.turn;
+        saveGameState();
+        Category shown = categoryById(q.category);
+        showQuestionTransition(shown.name, shown.id, categoryAccent(shown), this::showCheeseQuestion);
+    }
+
+    private void showCheeseQuestion() {
+        ClassicQuestion q=classicQuestionById.get(cheeseQuestionId);
+        if(q==null){Toast.makeText(this,"Η ερώτηση δεν είναι διαθέσιμη",Toast.LENGTH_LONG).show();return;}
+        applyTheme(prefs.getString("theme",THEME_LIGHT));
+        LinearLayout root=baseColumn();root.setPadding(dp(18),dp(10),dp(18),dp(12));
+        root.addView(gameTopBar(false));
+        if (cheese.phase.equals("last") || cheese.attacking)
+            root.addView(sectionTitle(cheese.phase.equals("last")?"LAST DANCE":"ΣΑΜΠΟΤΑΖ"),fullMargins(0,2,0,6));
+        root.addView(cheeseScores(),fullMargins(0,6,0,8));
+        Category category=categoryById(q.category);
+        TextView title=pill(category.name.toUpperCase(java.util.Locale.forLanguageTag("el")),TEXT,CARD,softOutline(categoryAccent(category)));
+        title.setGravity(Gravity.CENTER);root.addView(title,fullMargins(3,0,3,10));
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);card.setPadding(dp(16),dp(18),dp(16),dp(18));
+        card.setMinimumHeight(dp(280));card.setBackground(round(CARD,softOutline(categoryAccent(category)),1,radius()));
+        card.setCameraDistance(dp(12000));
+        final boolean[] revealed={cheeseRevealed};
+        renderCheeseFace(card,q,revealed[0]);
+        card.setOnClickListener(v->{
+            revealed[0]=!revealed[0];cheeseRevealed=revealed[0];saveGameState();
+            playFlipFeedback();
+            if(!effectsEnabled){renderCheeseFace(card,q,revealed[0]);return;}
+            boolean showAnswer=revealed[0];
+            card.animate().rotationY(90f).setDuration(140).withEndAction(()->{
+                renderCheeseFace(card,q,showAnswer);card.setRotationY(-90f);
+                card.animate().rotationY(0f).setDuration(140).start();
+            }).start();
+        });
+        root.addView(card,fullMargins(2,0,2,8));
+        LinearLayout actions=new LinearLayout(this);actions.setGravity(Gravity.CENTER);
+        Button yes=button("✓  ΣΩΣΤΟ",CARD,TEXT),no=button("✕  ΛΑΘΟΣ",CARD,TEXT);
+        yes.setBackground(round(CARD,softOutline(GREEN),1,radius()));
+        no.setBackground(round(CARD,softOutline(RED),1,radius()));
+        yes.setOnClickListener(v->resolveCheese(true));no.setOnClickListener(v->resolveCheese(false));
+        actions.addView(yes,weightedMargins(1,2,0,5,0));
+        actions.addView(no,weightedMargins(1,5,0,2,0));
+        root.addView(actions,fullMargins(0,0,0,4));
+        setStaticScreen(root);
+    }
+
+    private void renderCheeseFace(LinearLayout card,ClassicQuestion q,boolean answer){
+        card.removeAllViews();
+        if(answer){
+            TextView label=text("ΑΠΑΝΤΗΣΗ",11,MUTED,true);label.setGravity(Gravity.CENTER);
+            card.addView(label,fullMargins(0,0,0,12));
+            TextView result=text(q.answer,24,TEXT,true);result.setGravity(Gravity.CENTER);
+            card.addView(result);
+            if(!q.explanation.isEmpty()){
+                TextView explanation=text(q.explanation,12,MUTED,false);
+                explanation.setGravity(Gravity.CENTER);
+                card.addView(explanation,fullMargins(0,12,0,0));
+            }
+        }else{
+            TextView question=text(q.question,23,TEXT,true);question.setGravity(Gravity.CENTER);
+            question.setLineSpacing(dp(4),1f);card.addView(question);
+        }
+    }
+
+    private void resolveCheese(boolean correct){
+        if(!cheese.questionOpen)return;
+        cheese.answer(correct);cheeseQuestionId="";cheeseRevealed=false;currentTeam=cheese.turn;
+        scoreA=cheese.count(0);scoreB=cheese.count(1);saveGameState();
+        showCheeseBoard();
+    }
+
+    private void showLastDance(){
+        applyTheme(prefs.getString("theme", THEME_LIGHT));currentTeam=cheese.turn;
+        LinearLayout root=baseColumn();root.setPadding(dp(20),dp(20),dp(20),dp(28));
+        root.addView(gameTopBar(false));
+        root.addView(text("LAST DANCE",38,modeAccent(GameMode.CHEESE),true),fullMargins(0,8,0,12));
+        root.addView(cheeseScores(),fullMargins(0,0,0,20));
+        addCheeseGrid(root,true);
+        Button decline=button("ΠΑΡΑΙΤΗΣΗ ΑΠΟ ΤΟ LAST DANCE",CARD,MUTED);
+        decline.setOnClickListener(v->new AlertDialog.Builder(this).setMessage("Ο αντίπαλος θα κερδίσει την παρτίδα. Συνέχεια;").setNegativeButton("Πίσω",null).setPositiveButton("Ναι",(d,w)->{cheese.declineLastDance();showCheeseWinner(cheese.winner);}).show());
+        root.addView(decline,fullMargins(0,18,0,0));
+        setScrollable(root);tensionShake(root);
+    }
+
+    private void showCheeseWinner(int team){
+        showUnifiedWinner(team);
+    }
+
+    private void tensionShake(View view){
+        if(!effectsEnabled)return;
+        android.animation.ObjectAnimator a=android.animation.ObjectAnimator.ofFloat(view,"translationX",0,dp(2),-dp(2),dp(1),-dp(1),0);
+        a.setDuration(320);a.start();
+    }
+
+    private void saveCheese(SharedPreferences.Editor e)throws Exception{
+        JSONObject o=new JSONObject();
+        JSONArray a=new JSONArray(),b=new JSONArray(),bag=new JSONArray();
+        for(int n:cheese.progress[0])a.put(n);for(int n:cheese.progress[1])b.put(n);
+        for(int n:cheeseDifficultyBag)bag.put(n);
+        o.put("a",a);o.put("b",b);o.put("turn",cheese.turn);o.put("sa",cheese.sabotage[0]);o.put("sb",cheese.sabotage[1]);
+        o.put("phase",cheese.phase);o.put("winner",cheese.winner);o.put("leader",cheese.lastLeader);
+        o.put("open",cheese.questionOpen);o.put("attack",cheese.attacking);o.put("cat",cheese.category);
+        JSONArray allowed=new JSONArray();for(int d:cheeseDifficulties)allowed.put(d);
+        o.put("q",cheeseQuestionId);o.put("revealed",cheeseRevealed);o.put("bag",bag);o.put("difficulties",allowed);
+        e.putString("game_cheese",o.toString());e.putStringSet("game_cheese_used",new HashSet<>(cheeseUsed));
+    }
+
+    private void loadCheese()throws Exception{
+        JSONObject o=new JSONObject(prefs.getString("game_cheese","{}"));cheese=new CheeseGame();
+        for(int i=0;i<6;i++){cheese.progress[0][i]=o.getJSONArray("a").getInt(i);cheese.progress[1][i]=o.getJSONArray("b").getInt(i);}
+        cheese.turn=o.getInt("turn");cheese.sabotage[0]=o.getBoolean("sa");cheese.sabotage[1]=o.getBoolean("sb");
+        cheese.phase=o.getString("phase");cheese.winner=o.optInt("winner",-1);cheese.lastLeader=o.optInt("leader",-1);
+        cheese.questionOpen=o.getBoolean("open");cheese.attacking=o.getBoolean("attack");cheese.category=o.getInt("cat");
+        cheeseQuestionId=o.getString("q");cheeseRevealed=o.getBoolean("revealed");
+        cheeseDifficultyBag.clear();JSONArray bag=o.getJSONArray("bag");for(int i=0;i<bag.length();i++)cheeseDifficultyBag.add(bag.getInt(i));
+        cheeseDifficulties.clear();JSONArray allowed=o.optJSONArray("difficulties");if(allowed!=null)for(int i=0;i<allowed.length();i++)cheeseDifficulties.add(allowed.getInt(i));
+        if(cheeseDifficulties.isEmpty()){cheeseDifficulties.add(1);cheeseDifficulties.add(2);cheeseDifficulties.add(3);}
+        cheeseUsed.clear();cheeseUsed.addAll(prefs.getStringSet("game_cheese_used",new HashSet<>()));
+    }
+
+    private void resumeCheese(){
+        if(inSuddenDeath){applyTheme(prefs.getString("theme", THEME_LIGHT));
+            if(!suddenStarted)showSuddenDeathIntro();
+            else if(suddenMode==null||suddenMode.isEmpty())showSuddenRoulette();
+            else if("closest".equals(suddenMode))showClosestSudden();
+            else if(suddenResultA!=null&&suddenResultB!=null)continueSuddenAfterIndividualAnswer(suddenTeam);
+            else showSuddenQuestion();return;
+        }
+        if(cheese.questionOpen)showCheeseQuestion();else showCheeseBoard();
+    }
+
+    private void renderConnectionSpecial(LinearLayout root,SpecialQuestion q){
+        LinearLayout card=cardColumn();card.setMinimumHeight(dp(160));
+        card.setBackground(round(CARD,TEAL,2,radius()));card.setCameraDistance(dp(12000));
+        Runnable render=()->{
+            card.removeAllViews();
+            if(activeSpecialAnswersVisible){
+                TextView answerLabel=text("ΑΠΑΝΤΗΣΗ",12,MUTED,true);answerLabel.setGravity(Gravity.CENTER);
+                card.addView(answerLabel,fullMargins(0,0,0,8));
+                for(String answer:q.answers){
+                    TextView value=text(answer,20,TEXT,true);value.setGravity(Gravity.CENTER);
+                    card.addView(value,fullMargins(4,4,4,4));
+                }
+            }else{
+                TextView instruction=text("ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ",17,TEXT,true);
+                instruction.setGravity(Gravity.CENTER);card.addView(instruction);
+            }
+        };
+        render.run();
+        card.setOnClickListener(v->{
+            activeSpecialAnswersVisible=!activeSpecialAnswersVisible;saveGameState();playFlipFeedback();
+            if(!effectsEnabled){render.run();return;}
+            card.animate().rotationY(90).setDuration(140).withEndAction(()->{
+                render.run();card.setRotationY(-90f);
+                card.animate().rotationY(0f).setDuration(140).start();
+            }).start();
+        });
+        root.addView(card,fullMargins(4,4,4,12));
+        Button yes=primaryButton("✓  ΣΩΣΤΟ",GREEN),no=primaryButton("✕  ΛΑΘΟΣ",RED);
+        yes.setOnClickListener(v->resolveSpecialQuestion(q,2,true));no.setOnClickListener(v->resolveSpecialQuestion(q,0,false));
+        root.addView(yes,fullMargins(4,0,4,8));root.addView(no,fullMargins(4,0,4,8));
+    }
+
+    // ---------- HOME / SETUP ----------
+
+    private void showHome() {
+        applyTheme(prefs.getString("theme", THEME_LIGHT));
+        settingsSource = ScreenSource.HOME;
         LinearLayout root = baseColumn();
-        root.addView(simpleBackBar("Οδηγίες", this::showHome));
+        root.setPadding(dp(16), dp(8), dp(16), dp(10));
 
-        TextView intro = text("Όλοι οι κανόνες του ΚΟΥΙΖΑΡΑ σε ένα σημείο. Τα ⓘ ανοίγουν σύντομες επεξηγήσεις μέσα στις οθόνες.", 14, MUTED, false);
-        intro.setGravity(Gravity.CENTER);
-        root.addView(intro, fullMargins(8, 0, 8, 14));
+        ImageView hero = new ImageView(this);
+        hero.setImageResource(isDarkTheme() ? R.drawable.poster_home_dark : R.drawable.poster_home_light);
+        hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        hero.setContentDescription("QUIZARA — ο Σκεπτόμενος");
+        root.addView(hero, new LinearLayout.LayoutParams(-1, dp(245)));
 
-        root.addView(instructionSection("ΔΙΑΘΕΣΙΜΑ MODES",
-                "⚔  ΜΟΝΟΜΑΧΙΑ — 2 ομάδες, κανονικές και Special ερωτήσεις.\n" +
-                "🧠  ΚΛΑΣΙΚΟ — επιλέγεις μικρή, μεσαία ή μεγάλη διάρκεια και συμπληρώνεις τις κατηγορίες.", BLUE));
+        if (gameActive) {
+            Button resume = button("ΣΥΝΕΧΕΙΑ  →", CARD, TEXT);
+            resume.setBackground(round(CARD, isDarkTheme() ? BORDER : Color.rgb(48, 46, 42), 2, radius()));
+            resume.setMinHeight(dp(52));
+            resume.setOnClickListener(v -> resumeSavedGame());
+            root.addView(resume, fullMargins(2, 6, 2, 8));
+        }
+        addHomeMode(root, "ΜΟΝΟΜΑΧΙΑ", isDarkTheme() ? Color.rgb(174, 105, 251) : Color.rgb(18, 18, 17), 0);
+        addHomeMode(root, "ΚΛΑΣΙΚΟ", isDarkTheme() ? Color.rgb(255, 217, 40) : ORANGE, 1);
+        addHomeMode(root, "4 ΤΥΡΙΑ", isDarkTheme() ? Color.rgb(0, 221, 208) : BLUE, 2);
 
-        root.addView(instructionSection("ΚΟΙΝΕΣ ΚΑΤΗΓΟΡΙΕΣ",
-                "⚽ Αθλητικά   ·   🎨 Τέχνη   ·   ⚛ Επιστήμη\n" +
-                "🏛 Ιστορία   ·   🧠 Γενικές   ·   🌐 Γεωγραφία\n\n" +
-                "Οι έξι βασικές κατηγορίες είναι σταθερές και δεν απενεργοποιούνται.", GREEN));
-
-        root.addView(instructionSection("⚔  ΜΟΝΟΜΑΧΙΑ",
-                "Οι ομάδες παίζουν εναλλάξ. Υπάρχουν 18 κανονικές ερωτήσεις: ×1 εύκολη, ×2 μεσαία και ×3 δύσκολη σε κάθε κατηγορία. Κάθε πλακίδιο παίζεται μία φορά.\n\n" +
-                "Κάθε ομάδα έχει έναν Διπλασιασμό για όλη την παρτίδα. Διπλασιάζει την αξία μίας κανονικής ή Special ερώτησης και καταναλώνεται ακόμη κι αν η απάντηση είναι λάθος.\n\n" +
-                "Στο setup επιλέγεις μόνο ποιες Special κατηγορίες θα είναι ενεργές. Οι έξι κλασικές κατηγορίες είναι πάντα ενεργές.", ORANGE));
-
-        root.addView(instructionSection("SPECIAL ΚΑΤΗΓΟΡΙΕΣ · ΜΟΝΟΜΑΧΙΑ",
-                "🏆 TOP 5 — ο εκφωνητής βλέπει τις 5 σωστές απαντήσεις. 5/5 = 2π, 4/5 και σταμάτησε = 1π, αποτυχία = 0.\n" +
-                "◎ ΒΡΕΣ 3 — βρες οποιεσδήποτε 3 αποδεκτές απαντήσεις = 2π.\n" +
-                "👤 PERSON ID — 1ο clue = 3π, 2ο = 2π, 3ο = 1π.\n" +
-                "🌐 COUNTRY ID — 1ο clue = 3π, 2ο = 2π, 3ο = 1π.\n" +
-                "↕ ΒΑΛΤΑ ΣΕ ΣΕΙΡΑ — drag & drop μέχρι να μπουν όλα στη σωστή σειρά = 2π.\n\n" +
-                "Κάθε ενεργό Special εμφανίζεται δύο φορές συνολικά και είναι κοινό για τις δύο ομάδες.", PURPLE));
-
-        root.addView(instructionSection("🧠  ΚΛΑΣΙΚΟ",
-                "Μόλις επιλέξεις Κλασικό διαλέγεις διάρκεια: Μικρή = 1 σωστή ανά κατηγορία, Μεσαία = 2, Μεγάλη = 3.\n\n" +
-                "Σωστή απάντηση = ο ίδιος παίκτης συνεχίζει. Λάθος = αλλάζει η σειρά. Πριν από κάθε ερώτηση ο ενεργός παίκτης διαλέγει ανάμεσα σε δύο κατηγορίες.\n\n" +
-                "Στο setup επιλέγεις Εύκολες, Μεσαίες, Δύσκολες ή οποιονδήποτε συνδυασμό. Η σειρά δυσκολιών είναι ισότιμη για τους δύο παίκτες.", GREEN));
-
-        root.addView(instructionSection("SPECIAL ABILITIES · ΚΛΑΣΙΚΟ",
-                "🥷 ΚΛΟΠΗ ×1 — εμφανίζεται μόνο αφού ο αντίπαλος πατήσει Λάθος. Αν γίνει Πάσο, δεν καταναλώνεται. Μπορεί να απενεργοποιηθεί από τις Ρυθμίσεις όταν και οι δύο παίκτες βλέπουν την απάντηση στην ίδια οθόνη.\n\n" +
-                "🔀 ΑΝΑΚΑΤΕΜΑ ×1 — αλλάζει τις διαθέσιμες κατηγορίες χωρίς να χαθεί η σειρά. Με 4+ κατηγορίες αλλάζουν και οι δύο, με 3 αλλάζει μόνο η μία, με 2 ή 1 δεν αλλάζει τίποτα και δεν καταναλώνεται.\n\n" +
-                "↻ ΑΛΛΑΓΗ ΕΡΩΤΗΣΗΣ ×1 — αντικαθιστά την ερώτηση με άλλη ίδιας κατηγορίας και δυσκολίας, μόνο πριν αποκαλυφθεί η απάντηση.", BLUE));
-
-        root.addView(instructionSection("ΙΣΟΠΑΛΙΑ & ΡΟΥΛΕΤΑ",
-                "Αν η παρτίδα τελειώσει ισόπαλη, επιλέγετε 🤝 Ισοπαλία ή 🔪 Ξαφνικό Θάνατο.\n\n" +
-                "Στον Ξαφνικό Θάνατο η ρουλέτα κληρώνει μία δοκιμασία:\n" +
-                "• Σωστό / Λάθος\n• Πολλαπλής Επιλογής\n• Over / Under\n• Διάλεξε το Σωστό\n• Πιο Κοντά Κερδίζει\n\n" +
-                "Παίζετε τη δοκιμασία που κληρώθηκε. Αν μία ομάδα επικρατήσει, κερδίζει την παρτίδα. Αν παραμείνει η ισοπαλία, γυρίζετε ξανά τη ρουλέτα.", RED));
-
-        root.addView(instructionSection("ΚΑΡΤΑ ΕΡΩΤΗΣΗΣ",
-                "Στις κανονικές ερωτήσεις η κάρτα λειτουργεί το ίδιο και στα δύο modes: πάτημα στην κάρτα → γυρίζει και δείχνει την απάντηση. Νέο πάτημα → επιστρέφει στην ερώτηση. Ο εκφωνητής καταχωρίζει Σωστό ή Λάθος.", YELLOW));
-
+        LinearLayout footer = new LinearLayout(this);
+        footer.setGravity(Gravity.CENTER_VERTICAL);
+        Button settings = button("⚙  Ρυθμίσεις", BG, TEXT);
+        settings.setOnClickListener(v -> { settingsSource = ScreenSource.HOME; showSettings(); });
+        Button info = button("ⓘ  Πληροφορίες", BG, TEXT);
+        info.setOnClickListener(v -> showInstructions());
+        footer.addView(settings, new LinearLayout.LayoutParams(0, dp(48), 1));
+        footer.addView(info, new LinearLayout.LayoutParams(0, dp(48), 1));
+        root.addView(footer, fullMargins(0, 8, 0, 0));
         setScrollable(root);
+    }
+
+    private void launchPosterMode(int mode) {
+        Runnable launch = () -> {
+            clearSavedGame(); resetTeamNamesToDefault();
+            if (mode == 0) showSetup();
+            else if (mode == 1) { classicTargetPerCategory = 2; showClassicSetup(); }
+            else showCheeseSetup();
+        };
+        if (gameActive) confirmDiscardThen(launch); else launch.run();
+    }
+
+    /** Home menu: fixed-height poster tiles keep their labels and glyphs aligned. */
+    private void addHomeMode(LinearLayout root, String title, int accent, int mode) {
+        FrameLayout tile = new FrameLayout(this);
+        tile.setBackground(new PosterDrawable(accent));
+        tile.setClipChildren(true);
+
+        int ink = isDarkTheme() && (mode == 0 || mode == 1 || mode == 2)
+                ? Color.rgb(12, 10, 16) : Color.WHITE;
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        body.setGravity(Gravity.CENTER_VERTICAL);
+        // Preserve label width on narrow devices; colors do not affect sizing.
+        body.setPadding(dp(18), 0, dp(14), 0);
+
+        // A MATCH_PARENT child in a WRAP_CONTENT FrameLayout measured at zero
+        // height on some devices. Use an explicit tile height and center its row.
+        View icon = modeGlyph(mode, ink);
+        body.addView(icon, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+        View divider = new View(this);
+        divider.setBackgroundColor(ink);
+        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(dp(2), dp(35));
+        dividerParams.setMargins(dp(13), 0, dp(14), 0);
+        body.addView(divider, dividerParams);
+
+        TextView name = text(title, 28, ink, true);
+        name.setTypeface(uiTypeface(true));
+        name.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        name.setSingleLine(true);
+        // Scale DOWN before truncating any mode name, in both Light/Dark.
+        // Android 6/7 do not have platform TextView auto-size, so use a
+        // conservative fallback instead of the larger fixed 28sp size.
+        name.setIncludeFontPadding(false);
+        name.setEllipsize(null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            name.setAutoSizeTextTypeUniformWithConfiguration(16, 28, 1, TypedValue.COMPLEX_UNIT_SP);
+        } else {
+            name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
+        }
+        body.addView(name, new LinearLayout.LayoutParams(0, -1, 1));
+        tile.addView(body, new FrameLayout.LayoutParams(-1, -1));
+
+        tile.setContentDescription("Παίξε " + title);
+        tile.setOnClickListener(v -> launchPosterMode(mode));
+        attachPressAnimation(tile);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(86));
+        lp.setMargins(dp(2), 0, dp(2), dp(10));
+        root.addView(tile, lp);
+    }
+
+    private View modeGlyph(int mode,int ink){
+        return new View(this){
+            final Paint p=new Paint(Paint.ANTI_ALIAS_FLAG);
+            @Override protected void onDraw(Canvas canvas){
+                super.onDraw(canvas);
+                float z=Math.min(getWidth(),getHeight())/48f;
+                canvas.save();canvas.translate((getWidth()-48*z)/2f,(getHeight()-48*z)/2f);canvas.scale(z,z);
+                p.setColor(ink);p.setStrokeWidth(3.5f);p.setStrokeCap(Paint.Cap.ROUND);
+                p.setStrokeJoin(Paint.Join.ROUND);p.setStyle(Paint.Style.STROKE);
+                if(mode==0){
+                    canvas.drawLine(9,8,37,39,p);canvas.drawLine(37,8,9,39,p);
+                    canvas.drawLine(7,18,19,7,p);canvas.drawLine(29,7,41,18,p);
+                    canvas.drawLine(9,42,16,35,p);canvas.drawLine(39,42,32,35,p);
+                }else if(mode==1){
+                    Path cup=new Path();cup.moveTo(13,9);cup.lineTo(35,9);cup.lineTo(32,25);
+                    cup.quadTo(24,35,16,25);cup.close();canvas.drawPath(cup,p);
+                    canvas.drawArc(new RectF(5,11,17,25),80,200,false,p);
+                    canvas.drawArc(new RectF(31,11,43,25),-100,200,false,p);
+                    canvas.drawLine(24,31,24,40,p);canvas.drawLine(14,42,34,42,p);
+                }else{
+                    Path cheese=new Path();cheese.moveTo(6,39);cheese.lineTo(12,18);
+                    cheese.lineTo(36,9);cheese.lineTo(43,38);cheese.close();canvas.drawPath(cheese,p);
+                    p.setStyle(Paint.Style.FILL);for(int[] h:new int[][]{{21,25,3},{31,32,4},{30,19,2}})
+                        canvas.drawCircle(h[0],h[1],h[2],p);
+                }
+                canvas.restore();
+            }
+        };
+    }
+
+    private void addPosterMode(LinearLayout root, String label, int color, Runnable action) {
+        Button b = primaryButton(label, color);
+        b.setTypeface(brandTypeface()); b.setTextSize(29);
+        b.setBackground(new PosterDrawable(color));
+        b.setPadding(dp(24), dp(12), dp(24), dp(12));
+        b.setMinHeight(dp(84));
+        b.setOnClickListener(v -> action.run());
+        root.addView(b, fullMargins(2, 0, 2, 12));
+    }
+
+    private class PosterDrawable extends android.graphics.drawable.Drawable {
+        private final int fill;
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        PosterDrawable(int color) { fill = color; }
+        @Override public void draw(Canvas canvas) {
+            android.graphics.Rect b = getBounds();
+            Path p = new Path(); float slant = dp(15);
+            p.moveTo(b.left + slant, b.top); p.lineTo(b.right, b.top);
+            p.lineTo(b.right - slant, b.bottom); p.lineTo(b.left, b.bottom); p.close();
+            paint.setColor(fill); canvas.drawPath(p, paint);
+        }
+        @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+        @Override public void setColorFilter(android.graphics.ColorFilter filter) { paint.setColorFilter(filter); }
+        @Override public int getOpacity() { return android.graphics.PixelFormat.TRANSLUCENT; }
+    }
+
+    // Info is paged so no vertical scrolling is needed on a phone.
+    private void showInstructions() {
+        LinearLayout root=baseColumn();
+        root.addView(simpleBackBar("QUIZARA",this::showHome));
+        root.addView(sectionTitle("Πληροφορίες"),fullMargins(0,4,0,8));
+        String[] titles={"Μονομαχία","Κλασικό","4 Τυριά"};
+        int[] colors={modeAccent(GameMode.DUEL),modeAccent(GameMode.CLASSIC),modeAccent(GameMode.CHEESE)};
+        for(int i=0;i<titles.length;i++){
+            final int page=i;
+            Button b=button(titles[i]+"   →",CARD,TEXT);
+            b.setTextSize(22);b.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+            b.setPadding(dp(24),0,dp(12),0);
+            b.setBackground(round(CARD,colors[i],2,radius()));
+            b.setOnClickListener(v->showInformationDetail(page));
+            root.addView(b,fullMargins(5,12,5,3));
+        }
+        setStaticScreen(root);
+    }
+
+
+    private void showInstructionsPage(int page) { showInformationDetail(Math.max(0,Math.min(2,page))); }
+
+
+    private void showInformationDetail(int page) {
+        LinearLayout root = baseColumn();
+        String[] titles = {"Μονομαχία", "Κλασικό", "4 Τυριά"};
+        page = Math.max(0, Math.min(2, page));
+        root.addView(simpleBackBar("QUIZARA", this::showInstructions));
+        root.addView(sectionTitle(titles[page]), fullMargins(0, 4, 0, 12));
+        if (page == 0) {
+            root.addView(instructionSection("Μονομαχία", "Έξι βασικές κατηγορίες με ερωτήσεις ×1, ×2, ×3. Οι ομάδες παίζουν εναλλάξ. Κάθε ομάδα έχει έναν Διπλασιασμό.", modeAccent(GameMode.DUEL)));
+            root.addView(instructionSection("Special", "TOP 5 · ΒΡΕΣ 3 · PERSON ID · COUNTRY ID · ΒΑΛ’ ΤΑ ΣΕ ΣΕΙΡΑ · ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ. Κάθε επιλεγμένο Special έχει δύο χρήσεις.", PURPLE));
+            root.addView(instructionSection("Λήξη", "Το Μαθηματικό Τέλος ισχύει πάντα. Στην ισοπαλία παίζεται Ξαφνικός Θάνατος. Αγγίζεις την κάρτα ερώτησης για να δεις την απάντηση.", BORDER));
+        } else if (page == 1) {
+            root.addView(instructionSection("Κλασικό", "Δύο σωστές απαντήσεις σε καθεμία από τις έξι κατηγορίες, σύνολο 12. Σε κάθε γύρο εμφανίζονται δύο διαθέσιμες κατηγορίες.", modeAccent(GameMode.CLASSIC)));
+            root.addView(instructionSection("Σειρά", "Στη σωστή απάντηση αυξάνεται η πρόοδος της κατηγορίας. Στο λάθος αλλάζει η σειρά χωρίς απώλεια προόδου.", BORDER));
+            root.addView(instructionSection("Ενέργειες", "Ανακάτεμα, αλλαγή ερώτησης και Κλοπή, μία φορά ανά ομάδα. Επιλέγεις δυσκολίες πριν από την παρτίδα.", BORDER));
+        } else {
+            root.addView(instructionSection("4 Τυριά", "Με δύο σωστές απαντήσεις η ομάδα κατακτά την κατηγορία. Όποια ομάδα αποκτήσει τέσσερις κατηγορίες κερδίζει.", modeAccent(GameMode.CHEESE)));
+            root.addView(instructionSection("Σαμποτάζ", "Κάθε ομάδα έχει μία χρήση. Μια σωστή απάντηση μειώνει κατά ένα την πρόοδο του αντιπάλου.", BORDER));
+            root.addView(instructionSection("Last Dance", "Πριν από τη νίκη στα τέσσερα τυριά μπορεί να δοθεί τελευταία ευκαιρία Σαμποτάζ. Στο 3–3 ακολουθεί Ξαφνικός Θάνατος.", BORDER));
+        }
+        setStaticScreen(root);
     }
 
     private View instructionSection(String titleValue, String bodyValue, int accent) {
@@ -618,71 +1055,7 @@ public class MainActivity extends Activity {
         return withMargins(card, 4, 0, 4, 12);
     }
 
-    private void showModeSelect() {
-        settingsSource = ScreenSource.MODE;
-        LinearLayout root = baseColumn();
-        root.addView(simpleBackBar("Διάλεξε mode", this::showHome));
-
-        TextView sub = text("Διάλεξε πώς θέλεις να παίξεις", 14, MUTED, false);
-        sub.setGravity(Gravity.CENTER);
-        root.addView(sub, fullMargins(0, 0, 0, 16));
-
-        // The only playable mode for now.
-        LinearLayout duel = cardColumn();
-        duel.setBackground(round(isDarkTheme() ? Color.rgb(21, 27, 25) : GREEN_SOFT, GREEN, 2, radius()));
-        duel.setMinimumHeight(dp(225));
-        LinearLayout duelHead = new LinearLayout(this);
-        duelHead.setGravity(Gravity.CENTER_VERTICAL);
-        View duelHeadSpacer = new View(this);
-        duelHead.addView(duelHeadSpacer, new LinearLayout.LayoutParams(dp(38), dp(38)));
-        TextView swords = text("⚔", 56, ORANGE, false);
-        swords.setGravity(Gravity.CENTER);
-        duelHead.addView(swords, new LinearLayout.LayoutParams(0, dp(66), 1));
-        Button duelInfo = infoButton("Μονομαχία", modeInfo("duel"), ORANGE);
-        duelHead.addView(duelInfo, new LinearLayout.LayoutParams(dp(38), dp(38)));
-        duel.addView(duelHead, fullMargins(0, 0, 0, 4));
-        TextView title = text("ΜΟΝΟΜΑΧΙΑ", 25, TEXT, true);
-        title.setGravity(Gravity.CENTER);
-        duel.addView(title);
-        TextView line = text("2 ομάδες · 18 κανονικές + Special · Διπλασιασμός", 13, MUTED, false);
-        line.setGravity(Gravity.CENTER);
-        duel.addView(line, fullMargins(0, 4, 0, 10));
-        Button duelPlay = primaryButton("ΠΑΙΞΕ ΜΟΝΟΜΑΧΙΑ", GREEN);
-        duelPlay.setOnClickListener(v -> showSetup());
-        duel.addView(duelPlay);
-        root.addView(duel, fullMargins(4, 0, 4, 18));
-
-        // Classic is now playable and deliberately uses the same visual language as Duel.
-        LinearLayout classic = cardColumn();
-        int classicAccent = GREEN;
-        classic.setBackground(round(CARD, classicAccent, 2, radius()));
-        classic.setMinimumHeight(dp(225));
-        LinearLayout classicHead = new LinearLayout(this);
-        classicHead.setGravity(Gravity.CENTER_VERTICAL);
-        View classicHeadSpacer = new View(this);
-        classicHead.addView(classicHeadSpacer, new LinearLayout.LayoutParams(dp(38), dp(38)));
-        TextView brain = text("🧠", 52, classicAccent, false);
-        brain.setGravity(Gravity.CENTER);
-        classicHead.addView(brain, new LinearLayout.LayoutParams(0, dp(66), 1));
-        Button classicInfo = infoButton("Κλασικό", modeInfo("classic"), classicAccent);
-        classicHead.addView(classicInfo, new LinearLayout.LayoutParams(dp(38), dp(38)));
-        classic.addView(classicHead, fullMargins(0, 0, 0, 4));
-        TextView classicTitle = text("ΚΛΑΣΙΚΟ", 24, TEXT, true);
-        classicTitle.setGravity(Gravity.CENTER);
-        classic.addView(classicTitle);
-        TextView classicLine = text("Μικρή · Μεσαία · Μεγάλη διάρκεια · 6 κατηγορίες", 13, MUTED, false);
-        classicLine.setGravity(Gravity.CENTER);
-        classicLine.setMaxLines(2);
-        classic.addView(classicLine, fullMargins(0, 4, 0, 10));
-        Button classicPlay = primaryButton("ΠΑΙΞΕ ΚΛΑΣΙΚΟ", GREEN);
-        classicPlay.setOnClickListener(v -> showClassicDurationSelect());
-        classic.addView(classicPlay);
-        root.addView(classic, fullMargins(4, 0, 4, 18));
-
-        // Only currently playable modes are shown.
-
-        setStaticScreen(root);
-    }
+    private void showModeSelect() { showHome(); }
 
     private View simpleBackBar(String titleValue, Runnable backAction) {
         LinearLayout line = new LinearLayout(this);
@@ -691,7 +1064,7 @@ public class MainActivity extends Activity {
         View back = backArrowButton(true);
         back.setOnClickListener(v -> backAction.run());
         line.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = text(titleValue, 22, TEXT, true);
+        TextView title = "QUIZARA".equals(titleValue) ? gameBrandTitle() : text(titleValue, 22, TEXT, true);
         title.setGravity(Gravity.CENTER);
         line.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
         View spacer = new View(this);
@@ -710,7 +1083,7 @@ public class MainActivity extends Activity {
         root.addView(title, fullMargins(0, 0, 0, 8));
 
         String modeLabel = gameMode == GameMode.CLASSIC ? "ΚΛΑΣΙΚΟ" : "ΜΟΝΟΜΑΧΙΑ";
-        TextView mode = pill(modeLabel, (gameMode == GameMode.CLASSIC ? GREEN : ORANGE), CARD, BORDER);
+        TextView mode = pill(modeLabel, modeAccent(gameMode), CARD, softOutline(modeAccent(gameMode)));
         mode.setGravity(Gravity.CENTER);
         root.addView(mode, centeredWrapMargins(0, 0, 0, 12));
 
@@ -723,7 +1096,7 @@ public class MainActivity extends Activity {
             progress = text("Σειρά: " + currentTeamName() + "\n" + teamA + "  🥷" + stealResumeA + "  🔀" + (shuffleAvailableA ? "1" : "0") + "  ↻" + (changeQuestionAvailableA ? "1" : "0") + "   ·   " + teamB + "  🥷" + stealResumeB + "  🔀" + (shuffleAvailableB ? "1" : "0") + "  ↻" + (changeQuestionAvailableB ? "1" : "0"), 13, MUTED, false);
         } else {
             score = text(teamA + "  " + scoreA + " — " + scoreB + "  " + teamB, 21, TEXT, true);
-            progress = text(answered + " / " + totalDuelQuestions() + " ερωτήσεις παίχτηκαν\nΣειρά: " + currentTeamName(), 14, MUTED, false);
+            progress = text("Σειρά: " + currentTeamName(), 14, MUTED, false);
         }
         score.setGravity(Gravity.CENTER);
         applyAdaptiveText(score, 11, 20, true);
@@ -745,6 +1118,7 @@ public class MainActivity extends Activity {
     }
 
     private void resumeSavedGame() {
+        if (gameMode == GameMode.CHEESE) { resumeCheese(); return; }
         if (!gameActive) { showHome(); return; }
         if (tieChoicePending) {
             showTieChoice();
@@ -810,97 +1184,51 @@ public class MainActivity extends Activity {
     private void showSetup() {
         settingsSource = ScreenSource.SETUP;
         LinearLayout root = baseColumn();
-        root.addView(topBar(true, false));
-
-        TextView subtitle = text("Ρύθμιση Ομάδων", 20, TEXT, true);
-        subtitle.setGravity(Gravity.CENTER);
-        root.addView(subtitle, fullMargins(0, 4, 0, 12));
-
-        // Duel setup uses the full screen width: team cards are stacked instead of squeezed side-by-side.
-        EditText a = teamInput(teamA);
-        EditText b = teamInput(teamB);
-        root.addView(teamSetupWideCard("Ομάδα Α", "♙♙", a, BLUE, BLUE_SOFT), fullMargins(8, 0, 8, 8));
-        root.addView(teamSetupWideCard("Ομάδα Β", "♙♙", b, RED, RED_SOFT), fullMargins(8, 0, 8, 6));
-
-        root.addView(sectionTitle("Special Κατηγορίες"), fullMargins(0, 8, 0, 2));
-        TextView specialHint = text("Διάλεξε ποια Special θα μπουν στην παρτίδα.", 11, MUTED, false);
-        specialHint.setGravity(Gravity.CENTER);
-        root.addView(specialHint, fullMargins(8, 0, 8, 5));
-
-        final String[] specialTypes = new String[]{"top5", "find3", "person_id", "country_id", "rank"};
-        final Map<String, Boolean> selectedSpecials = new HashMap<>();
-        final Map<String, Button> specialButtons = new HashMap<>();
-        for (String type : specialTypes) selectedSpecials.put(type, true);
-
-        GridLayout specialGrid = new GridLayout(this);
-        specialGrid.setColumnCount(2);
-        for (String type : specialTypes) {
-            FrameLayout specialCell = new FrameLayout(this);
-            Button toggle = button("", CARD, TEXT);
-            toggle.setTextSize(12);
-            toggle.setMinHeight(dp(68));
-            toggle.setPadding(dp(8), dp(8), dp(34), dp(8));
-            specialButtons.put(type, toggle);
+        root.addView(topBar(true,false));
+        root.addView(sectionTitle("ΡΥΘΜΙΣΕΙΣ ΟΜΑΔΩΝ"), fullMargins(0,4,0,12));
+        EditText a = teamInput(teamA), b = teamInput(teamB);
+        root.addView(teamColorSettings(a,b),fullMargins(2,0,2,12));
+        root.addView(sectionTitle("SPECIAL"),fullMargins(0,8,0,6));
+        final String[] types = {"top5","find3","person_id","country_id","rank","connection"};
+        final Map<String,Boolean> chosen = new HashMap<>();
+        GridLayout specials = new GridLayout(this); specials.setColumnCount(2);
+        for(String type : types) {
+            chosen.put(type,true);
+            Button toggle = button("✓  " + specialTypeLabel(type), specialTypeSoft(type), specialTypeColor(type));
+            toggle.setTextSize(12);toggle.setMinHeight(dp(48));
+            toggle.setBackground(round(specialTypeSoft(type),specialTypeColor(type),2,radius()));
             toggle.setOnClickListener(v -> {
-                boolean next = !Boolean.TRUE.equals(selectedSpecials.get(type));
-                selectedSpecials.put(type, next);
-                styleSpecialToggle(toggle, type, next);
-                toggle.setPadding(dp(8), dp(8), dp(34), dp(8));
+                boolean on = !Boolean.TRUE.equals(chosen.get(type)); chosen.put(type,on);
+                toggle.setText((on?"✓  ":"○  ")+specialTypeLabel(type));
+                toggle.setTextColor(on?specialTypeColor(type):MUTED);
+                toggle.setBackground(round(on?specialTypeSoft(type):CARD,on?specialTypeColor(type):BORDER,on?2:1,radius()));
             });
-            styleSpecialToggle(toggle, type, true);
-            toggle.setPadding(dp(8), dp(8), dp(34), dp(8));
-            specialCell.addView(toggle, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(68)));
-            Button info = infoButton(specialTypeLabel(type), specialInfo(type), specialTypeColor(type));
-            FrameLayout.LayoutParams infoLp = new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.END | Gravity.TOP);
-            infoLp.setMargins(0, dp(5), dp(5), 0);
-            specialCell.addView(info, infoLp);
-            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = 0;
-            lp.height = dp(76);
-            lp.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-            lp.setMargins(dp(5), dp(4), dp(5), dp(4));
-            specialGrid.addView(specialCell, lp);
+            GridLayout.LayoutParams p = new GridLayout.LayoutParams();
+            p.width=0; p.height=dp(48);p.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
+            p.setMargins(dp(4),dp(4),dp(4),dp(4));specials.addView(toggle,p);
         }
-        root.addView(specialGrid, fullMargins(4, 0, 4, 6));
-
-        Button start = primaryButton("Έναρξη Αγώνα", BLUE);
+        root.addView(specials,fullMargins(0,0,0,10));
+        Button start = modeStartButton(GameMode.DUEL);
         start.setOnClickListener(v -> {
-            teamA = cleanName(a.getText().toString(), DEFAULT_TEAM_A);
-            teamB = cleanName(b.getText().toString(), DEFAULT_TEAM_B);
+            teamA=cleanName(a.getText().toString(),DEFAULT_TEAM_A);
+            teamB=cleanName(b.getText().toString(),DEFAULT_TEAM_B);
             enabledSpecialTypes.clear();
-            for (String type : specialTypes) if (Boolean.TRUE.equals(selectedSpecials.get(type))) enabledSpecialTypes.add(type);
-            resetGame();
-            saveGameState();
-            showBoard();
+            for(String type:types) if(Boolean.TRUE.equals(chosen.get(type))) enabledSpecialTypes.add(type);
+            resetGame();saveGameState();showBoard();
         });
-        root.addView(start, fullMargins(8, 2, 8, 18));
+        root.addView(start,fullMargins(4,2,4,8));
         setStaticScreen(root);
     }
+
 
     // ---------- CLASSIC MODE ----------
 
     private void showClassicDurationSelect() {
-        LinearLayout root = baseColumn();
-        root.addView(simpleBackBar("Διάρκεια Κλασικού", this::showModeSelect));
-
-        TextView intro = text("Πόσες σωστές απαντήσεις χρειάζονται σε κάθε κατηγορία;", 15, MUTED, false);
-        intro.setGravity(Gravity.CENTER);
-        root.addView(intro, fullMargins(10, 4, 10, 18));
-
-        Button small = classicDurationButton("ΜΙΚΡΗ", "1 σωστή ανά κατηγορία · 6 συνολικά", 1, GREEN);
-        small.setOnClickListener(v -> { classicTargetPerCategory = 1; showClassicSetup(); });
-        root.addView(small, fullMargins(8, 0, 8, 12));
-
-        Button medium = classicDurationButton("ΜΕΣΑΙΑ", "2 σωστές ανά κατηγορία · 12 συνολικά", 2, ORANGE);
-        medium.setOnClickListener(v -> { classicTargetPerCategory = 2; showClassicSetup(); });
-        root.addView(medium, fullMargins(8, 0, 8, 12));
-
-        Button large = classicDurationButton("ΜΕΓΑΛΗ", "3 σωστές ανά κατηγορία · 18 συνολικά", 3, RED);
-        large.setOnClickListener(v -> { classicTargetPerCategory = 3; showClassicSetup(); });
-        root.addView(large, fullMargins(8, 0, 8, 20));
-
-        setStaticScreen(root);
+        // Classic is always 2 correct answers in all 6 categories: 12 per player.
+        classicTargetPerCategory = 2;
+        showClassicSetup();
     }
+
 
     private Button classicDurationButton(String title, String detail, int target, int accent) {
         Button b = button(title + "\n" + detail, CARD, TEXT);
@@ -911,74 +1239,48 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private int classicGoalTotal() {
-        return classicTargetPerCategory * CATEGORIES.length;
-    }
+    private int classicGoalTotal() { return 12; }
+
 
     private void showClassicSetup() {
         settingsSource = ScreenSource.CLASSIC_SETUP;
-        LinearLayout root = baseColumn();
-        // Keep setup branding identical in both modes: colored ΚΟΥΙΖΑΡΑ + Ρύθμιση Ομάδων.
-        root.addView(topBar(true, false));
-
-        TextView subtitle = text("Ρύθμιση Ομάδων", 20, TEXT, true);
-        subtitle.setGravity(Gravity.CENTER);
-        root.addView(subtitle, fullMargins(0, 4, 0, 12));
-
-        LinearLayout teams = new LinearLayout(this);
-        teams.setOrientation(LinearLayout.HORIZONTAL);
-        EditText a = teamInput(teamA);
-        EditText b = teamInput(teamB);
-        int leftAccent = BLUE;
-        int rightAccent = RED;
-        int leftSoft = BLUE_SOFT;
-        int rightSoft = RED_SOFT;
-        teams.addView(teamSetupCard("Ομάδα Α", "♙♙", a, leftAccent, leftSoft), weightedMargins(1, 0, 4, 4, 0));
-        teams.addView(teamSetupCard("Ομάδα Β", "♙♙", b, rightAccent, rightSoft), weightedMargins(1, 4, 4, 0, 0));
-        root.addView(teams);
-
-        root.addView(sectionTitle("Δυσκολίες παρτίδας"), fullMargins(0, 14, 0, 6));
-        TextView hint = text("Επίλεξε μία ή περισσότερες δυσκολίες. Και οι δύο παίκτες ακολουθούν την ίδια σειρά δυσκολιών.", 12, MUTED, false);
-        hint.setGravity(Gravity.CENTER);
-        root.addView(hint, fullMargins(8, 0, 8, 8));
-
-        final boolean[] selected = new boolean[]{true, true, true};
-        final Button[] toggles = new Button[3];
-        LinearLayout difficulties = new LinearLayout(this);
-        difficulties.setOrientation(LinearLayout.VERTICAL);
-        for (int i = 0; i < 3; i++) {
-            final int idx = i;
-            final int difficulty = i + 1;
-            Button choice = button("", CARD, TEXT);
-            choice.setMinHeight(dp(58));
-            toggles[i] = choice;
+        classicTargetPerCategory = 2;
+        LinearLayout root=baseColumn();
+        root.addView(topBar(true,false));
+        root.addView(sectionTitle("ΡΥΘΜΙΣΕΙΣ ΟΜΑΔΩΝ"),fullMargins(0,4,0,12));
+        EditText a=teamInput(teamA), b=teamInput(teamB);
+        root.addView(teamColorSettings(a,b),fullMargins(2,0,2,12));
+        root.addView(sectionTitle("Δυσκολίες παρτίδας"),fullMargins(0,12,0,7));
+        final boolean[] selected={true,true,true};
+        final Button[] buttons=new Button[3];
+        LinearLayout difficultyList=new LinearLayout(this);
+        difficultyList.setOrientation(LinearLayout.VERTICAL);
+        for(int i=0;i<3;i++) {
+            final int idx=i;final int level=i+1;
+            Button choice=button("",CARD,TEXT);buttons[i]=choice;
+            choice.setMinHeight(dp(54));
+            styleClassicDifficultyToggle(choice,level,true);
             choice.setOnClickListener(v -> {
-                int active = (selected[0] ? 1 : 0) + (selected[1] ? 1 : 0) + (selected[2] ? 1 : 0);
-                if (selected[idx] && active == 1) {
-                    Toast.makeText(this, "Χρειάζεται τουλάχιστον μία δυσκολία", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                selected[idx] = !selected[idx];
-                styleClassicDifficultyToggle(toggles[idx], difficulty, selected[idx]);
+                int count=(selected[0]?1:0)+(selected[1]?1:0)+(selected[2]?1:0);
+                if(selected[idx] && count==1) { Toast.makeText(this,"Τουλάχιστον μία δυσκολία",Toast.LENGTH_SHORT).show();return; }
+                selected[idx]=!selected[idx];
+                styleClassicDifficultyToggle(choice,level,selected[idx]);
             });
-            styleClassicDifficultyToggle(choice, difficulty, true);
-            difficulties.addView(choice, fullMargins(4, 3, 4, 3));
+            difficultyList.addView(choice,fullMargins(3,3,3,3));
         }
-        root.addView(difficulties);
-
-        Button start = primaryButton("Έναρξη Κλασικού", GREEN);
+        root.addView(difficultyList);
+        Button start=modeStartButton(GameMode.CLASSIC);
         start.setOnClickListener(v -> {
-            teamA = cleanName(a.getText().toString(), DEFAULT_TEAM_A);
-            teamB = cleanName(b.getText().toString(), DEFAULT_TEAM_B);
-            Set<Integer> diffs = new HashSet<>();
-            for (int i = 0; i < 3; i++) if (selected[i]) diffs.add(i + 1);
-            resetClassicGame(diffs);
-            saveGameState();
-            showClassicBoard();
+            teamA=cleanName(a.getText().toString(),DEFAULT_TEAM_A);
+            teamB=cleanName(b.getText().toString(),DEFAULT_TEAM_B);
+            Set<Integer> diffs=new HashSet<>();
+            for(int i=0;i<3;i++) if(selected[i]) diffs.add(i+1);
+            resetClassicGame(diffs);saveGameState();showClassicBoard();
         });
-        root.addView(start, fullMargins(4, 4, 4, 24));
+        root.addView(start,fullMargins(4,12,4,8));
         setStaticScreen(root);
     }
+
 
     private void styleClassicDifficultyToggle(Button b, int difficulty, boolean selected) {
         int accent = difficultyColor(difficulty);
@@ -1035,8 +1337,8 @@ public class MainActivity extends Activity {
         ensureClassicDifficultySchedule(40);
         classicQuestionsPlayedA = 0;
         classicQuestionsPlayedB = 0;
-        stealAvailableA = classicStealEnabled;
-        stealAvailableB = classicStealEnabled;
+        stealAvailableA = true;
+        stealAvailableB = true;
         shuffleAvailableA = true;
         shuffleAvailableB = true;
         changeQuestionAvailableA = true;
@@ -1174,56 +1476,34 @@ public class MainActivity extends Activity {
     }
 
     private void showClassicBoard() {
-        settingsSource = ScreenSource.CLASSIC_BOARD;
-        gameMode = GameMode.CLASSIC;
-        activeClassicQuestionId = "";
-        classicQuestionRevealed = false;
-        classicAnswerEverRevealed = false;
-        classicQuestionPhase = 0;
-        if (classicOption1.isEmpty() && classicOption2.isEmpty()) refreshClassicCategoryOptions();
+        settingsSource=ScreenSource.CLASSIC_BOARD;
+        gameMode=GameMode.CLASSIC;
+        activeClassicQuestionId="";classicQuestionRevealed=false;
+        classicAnswerEverRevealed=false;classicQuestionPhase=0;
+        if(classicOption1.isEmpty() && classicOption2.isEmpty()) refreshClassicCategoryOptions();
         saveGameState();
-
-        LinearLayout root = baseColumn();
+        LinearLayout root=baseColumn();
         root.addView(gameTopBar(true));
-
-        TextView turn = pill("Σειρά: " + currentTeamName(), (currentTeam == 0 ? BLUE : RED), CARD, BORDER);
-        turn.setGravity(Gravity.CENTER);
-        applyAdaptiveText(turn, 10, 14, true);
-        turn.setPadding(dp(16), dp(9), dp(16), dp(9));
-        root.addView(turn, centeredWrapMargins(0, 8, 0, 18));
-
-        if (classicShuffleAvailable(currentTeam)) {
-            LinearLayout shuffleRow = new LinearLayout(this);
-            shuffleRow.setGravity(Gravity.CENTER_VERTICAL);
-            Button shuffle = button("🔀  ΑΝΑΚΑΤΕΜΑ · 1", ORANGE_SOFT, ORANGE);
-            shuffle.setTextSize(13);
-            shuffle.setMinHeight(dp(52));
-            shuffle.setOnClickListener(v -> reshuffleClassicOptions());
-            shuffleRow.addView(shuffle, new LinearLayout.LayoutParams(0, dp(52), 1));
-            Button shuffleInfo = infoButton("Ανακάτεμα", "Μία φορά ανά παίκτη. Με 4+ διαθέσιμες κατηγορίες αλλάζουν και οι δύο επιλογές, με 3 αλλάζει μόνο η μία, ενώ με 2 ή 1 δεν αλλάζει τίποτα και δεν καταναλώνεται.", ORANGE);
-            LinearLayout.LayoutParams sip = new LinearLayout.LayoutParams(dp(44), dp(44));
-            sip.setMargins(dp(8), 0, 0, 0);
-            shuffleRow.addView(shuffleInfo, sip);
-            root.addView(shuffleRow, fullMargins(20, 0, 20, 18));
+        root.addView(classicCompactScoreStrip(),fullMargins(5,3,5,9));
+        root.addView(turnBanner(currentTeamName(),currentTeam),centeredWrapMargins(0,3,0,14));
+        if(classicShuffleAvailable(currentTeam)) {
+            Button shuffle=button("🔀  ΑΝΑΚΑΤΕΜΑ · 1",ORANGE_SOFT,ORANGE);
+            shuffle.setMinHeight(dp(44));shuffle.setOnClickListener(v->reshuffleClassicOptions());
+            root.addView(shuffle,centeredWrapMargins(0,0,0,10));
         }
-
-        LinearLayout choices = new LinearLayout(this);
-        choices.setOrientation(LinearLayout.VERTICAL);
-        choices.setGravity(Gravity.CENTER);
-        if (!classicOption1.isEmpty()) {
-            LinearLayout.LayoutParams firstLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190));
-            firstLp.setMargins(dp(12), 0, dp(12), dp(8));
-            choices.addView(classicCategoryChoice(classicOption1), firstLp);
+        if(!classicOption1.isEmpty()){
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(150));
+            lp.setMargins(dp(6),0,dp(6),dp(12));
+            root.addView(classicCategoryChoice(classicOption1),lp);
         }
-        if (!classicOption2.isEmpty()) {
-            LinearLayout.LayoutParams secondLp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(190));
-            secondLp.setMargins(dp(12), dp(8), dp(12), 0);
-            choices.addView(classicCategoryChoice(classicOption2), secondLp);
+        if(!classicOption2.isEmpty()){
+            LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(150));
+            lp.setMargins(dp(6),0,dp(6),dp(6));
+            root.addView(classicCategoryChoice(classicOption2),lp);
         }
-        root.addView(choices, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-
         setStaticScreen(root);
     }
+
 
     private View classicToolsStatusCard(int team) {
         int accent = team == 0 ? BLUE : RED;
@@ -1264,35 +1544,31 @@ public class MainActivity extends Activity {
     }
 
     private View classicCompactScoreStrip() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER);
-        row.setPadding(dp(8), dp(11), dp(8), dp(11));
-        row.setBackground(round(CARD, BORDER, 1, radius()));
-        row.setElevation(dp(5));
-        row.setMinimumHeight(dp(58));
-        TextView a = text(teamA + "  " + classicTotal(0) + "/" + classicGoalTotal(), 17, BLUE, true);
-        a.setGravity(Gravity.CENTER);
-        applyAdaptiveText(a, 11, 18, true);
-        TextView vs = text("VS", 15, MUTED, true);
-        vs.setGravity(Gravity.CENTER);
-        TextView b = text(classicTotal(1) + "/" + classicGoalTotal() + "  " + teamB, 17, RED, true);
-        b.setGravity(Gravity.CENTER);
-        applyAdaptiveText(b, 11, 18, true);
-        row.addView(a, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        row.addView(vs, new LinearLayout.LayoutParams(dp(42), LinearLayout.LayoutParams.WRAP_CONTENT));
-        row.addView(b, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(6),dp(7),dp(6),dp(7));
+        row.setBackground(round(CARD,BORDER,1,radius()));
+        for(int team=0;team<2;team++) {
+            final int index=team;
+            TextView label=text((currentTeam==team?"▶  ":"")+(team==0?teamA:teamB)+"  "+classicTotal(team)+"/12",16,teamAccent(team),true);
+            applyAdaptiveText(label,10,16,true);
+            label.setPadding(dp(3),dp(11),dp(3),dp(11));
+            label.setBackground(round(currentTeam==team?teamTint(team):CARD,teamAccent(team),currentTeam==team?3:1,radius()));
+            if(index==1){TextView vs=text("VS",13,MUTED,true);vs.setGravity(Gravity.CENTER);
+                row.addView(vs,new LinearLayout.LayoutParams(dp(35),dp(48)));}
+            row.addView(label,new LinearLayout.LayoutParams(0,dp(54),1));
+        }
         return row;
     }
+
 
     private View classicProgressPanel(int team) {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(5), dp(14), dp(5), dp(14));
-        int teamAccent = (team == 0 ? BLUE : RED);
+        int teamAccent = teamAccent(team);
         panel.setBackground(round(CARD, teamAccent, 1, radius()));
         panel.setElevation(dp(5));
-        TextView head = text(team == 0 ? "Α" : "Β", 14, (team == 0 ? BLUE : RED), true);
+        TextView head = text(team == 0 ? "Α" : "Β", 14, teamAccent, true);
         head.setGravity(Gravity.CENTER);
         panel.addView(head, fullMargins(0, 0, 0, 4));
         for (Category c : CATEGORIES) {
@@ -1326,16 +1602,19 @@ public class MainActivity extends Activity {
         card.setGravity(Gravity.CENTER);
         card.setPadding(dp(12), dp(14), dp(12), dp(14));
         int accent = categoryAccent(c);
-        card.setBackground(round(categorySoft(c), accent, 2, radius()));
-        card.setElevation(dp(7));
-        card.setMinimumHeight(dp(170));
-        TextView icon = text(c.icon, 50, accent, false);
-        icon.setGravity(Gravity.CENTER);
-        card.addView(icon);
-        TextView name = text(c.name, 21, accent, true);
+        // Same restrained category-card language used by the 4 Cheeses board.
+        card.setBackground(round(CARD, softOutline(accent), 1, radius()));
+        card.setElevation(0);
+        card.setMinimumHeight(dp(134));
+        card.addView(categoryGlyph(c.id,accent,34));
+        TextView name = text(c.name.toUpperCase(java.util.Locale.forLanguageTag("el")), 20, accent, true);
         name.setSingleLine(true);
         name.setGravity(Gravity.CENTER);
-        card.addView(name, fullMargins(0, 3, 0, 0));
+        card.addView(name, fullMargins(0, 1, 0, 2));
+        TextView currentProgress = text(teamA + " " + classicProgress(0, c.id) + "/2   ·   " + teamB + " " + classicProgress(1, c.id) + "/2", 11, TEXT, true);
+        currentProgress.setGravity(Gravity.CENTER);
+        applyAdaptiveText(currentProgress, 9, 11, true);
+        card.addView(currentProgress);
         attachPressAnimation(card);
         card.setOnClickListener(v -> startClassicQuestion(c.id));
         return card;
@@ -1407,24 +1686,7 @@ public class MainActivity extends Activity {
 
     private void showClassicQuestionLoading(ClassicQuestion q) {
         Category c = categoryById(q.category);
-        if (!effectsEnabled) { openClassicQuestion(q, false); return; }
-        LinearLayout root = baseColumn();
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(topBar(false, false));
-        TextView spacer = new TextView(this);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, dp(42)));
-        TextView icon = text(c.icon, 62, categoryAccent(c), false);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(round(categorySoft(c), categorySoft(c), 0, 100));
-        root.addView(icon, centeredSize(dp(118), dp(118), 0, 6, 0, 14));
-        TextView category = text(c.name, 22, TEXT, true);
-        category.setGravity(Gravity.CENTER);
-        root.addView(category, fullMargins(0, 0, 0, 10));
-        TextView loading = text("Ετοιμάζεται η ερώτηση…", 14, MUTED, false);
-        loading.setGravity(Gravity.CENTER);
-        root.addView(loading);
-        setStaticScreen(root);
-        handler.postDelayed(() -> openClassicQuestion(q, false), 720);
+        showQuestionTransition(c.name, c.id, categoryAccent(c), () -> openClassicQuestion(q, false));
     }
 
     private void openClassicQuestion(ClassicQuestion q, boolean stealAttempt) {
@@ -1443,7 +1705,7 @@ public class MainActivity extends Activity {
             steal.setGravity(Gravity.CENTER);
             root.addView(steal, centeredWrapMargins(0, 0, 0, 8));
         } else {
-            TextView turn = pill("Σειρά: " + currentTeamName(), (currentTeam == 0 ? BLUE : RED), CARD, BORDER);
+            TextView turn = pill("Σειρά: " + currentTeamName(), teamAccent(currentTeam), CARD, softOutline(teamAccent(currentTeam)));
             turn.setGravity(Gravity.CENTER);
             root.addView(turn, centeredWrapMargins(0, 0, 0, 8));
         }
@@ -1680,11 +1942,13 @@ public class MainActivity extends Activity {
             return true;
         }
         if (team == 1) {
-            // The second player has already had the fair response opportunity.
+            // ONLY Team A (the team that starts) can trigger a last equalizing
+            // opportunity for Team B. If B finishes first, B wins immediately.
             showClassicWinner(1, false);
             return true;
         }
-        // Player A completed first. Player B gets one final turn and may continue while correct.
+        // The FIRST/starting team (A) finished all categories. Only the SECOND
+        // team (B) may keep answering to equalize, ending on its first miss.
         classicFinalChance = true;
         classicFinisher = 0;
         currentTeam = 1;
@@ -1703,86 +1967,82 @@ public class MainActivity extends Activity {
     }
 
     private void showClassicWinner(int winnerTeam, boolean suddenDeath) {
-        gameActive = false;
-        clearSavedGame();
-        playVictoryMusic();
-        LinearLayout root = baseColumn();
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(topBar(false, false));
-        TextView trophy = text("🏆", 68, ORANGE, false);
-        trophy.setGravity(Gravity.CENTER);
-        root.addView(trophy, fullMargins(0, 24, 0, 6));
-        TextView title = text(suddenDeath ? "ΝΙΚΗ ΣΤΟ SUDDEN DEATH" : "ΤΕΛΟΣ ΠΑΡΤΙΔΑΣ", 24, TEXT, true);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
-        TextView winner = text("ΝΙΚΗΤΗΣ: " + (winnerTeam == 0 ? teamA : teamB), 27, GREEN, true);
-        winner.setGravity(Gravity.CENTER);
-        root.addView(winner, fullMargins(0, 8, 0, 10));
-        TextView totals = text(teamA + "  " + classicTotal(0) + "/" + classicGoalTotal() + "   —   " + classicTotal(1) + "/" + classicGoalTotal() + "  " + teamB, 17, TEXT, true);
-        totals.setGravity(Gravity.CENTER);
-        root.addView(totals, fullMargins(0, 0, 0, 14));
-        LinearLayout progress = new LinearLayout(this);
-        progress.setOrientation(LinearLayout.HORIZONTAL);
-        progress.addView(classicProgressPanel(0), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        progress.addView(classicProgressPanel(1), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
-        root.addView(progress, fullMargins(4, 0, 4, 18));
-        Button rematch = primaryButton("ΠΑΙΞΕ ΞΑΝΑ", GREEN);
-        rematch.setOnClickListener(v -> {
-            resetTeamNamesToDefault();
-            showClassicDurationSelect();
-        });
-        root.addView(rematch, fullMargins(8, 0, 8, 10));
-        Button menu = button("Κεντρικό μενού", CARD, TEXT);
-        menu.setBackground(round(CARD, BORDER, 1, radius()));
-        menu.setOnClickListener(v -> showHome());
-        root.addView(menu, fullMargins(8, 0, 8, 24));
-        setStaticScreen(root);
+        showUnifiedWinner(winnerTeam);
     }
 
     // ---------- BOARD ----------
 
     private void showBoard() {
-        settingsSource = ScreenSource.BOARD;
-        activeQuestionKey = "";
-        activeQuestionRevealed = false;
-        activeJokerSelected = false;
-        if (gameActive && answered >= totalDuelQuestions()) { showResult(); return; }
-        if (gameActive) saveGameState();
-        if (finalQuestionEnabled && remainingCount() == 1 && !finalIntroShown) {
-            finalIntroShown = true;
-            showFinalQuestionIntro();
-            return;
+        settingsSource=ScreenSource.BOARD;
+        activeQuestionKey="";activeQuestionRevealed=false;activeJokerSelected=false;
+        if(gameActive && answered>=totalDuelQuestions()){showResult();return;}
+        if(gameActive)saveGameState();
+        if(finalQuestionEnabled && remainingCount()==1 && !finalIntroShown){
+            finalIntroShown=true;showFinalQuestionIntro();return;
         }
-
-        LinearLayout root = baseColumn();
-        root.addView(gameTopBar(true));
-        root.addView(scoreStrip());
-
-        TextView turn = pill("Σειρά: " + currentTeamName(), currentTeam == 0 ? BLUE : RED, CARD, BORDER);
-        turn.setGravity(Gravity.CENTER);
-        applyAdaptiveText(turn, 10, 12, true);
-        root.addView(turn, centeredWrapMargins(0, 8, 0, 10));
-
-        String pressure = matchPressureText();
-        if (!pressure.isEmpty()) {
-            TextView tension = text(pressure, 13, TEXT, true);
-            tension.setGravity(Gravity.CENTER);
-            tension.setPadding(dp(12), dp(9), dp(12), dp(9));
-            tension.setBackground(round(THEME_DARK.equals(theme) ? Color.rgb(38, 32, 22) : ORANGE_SOFT, ORANGE, 1, radius()));
-            root.addView(tension, fullMargins(4, 0, 4, 10));
+        LinearLayout root=baseColumn();
+        root.addView(gameTopBar(false));
+        root.addView(scoreStrip(),fullMargins(4,3,4,7));
+        root.addView(turnBanner(currentTeamName(),currentTeam),centeredWrapMargins(0,2,0,8));
+        // Choose the one-time double BEFORE opening any regular or Special question.
+        // The choice is carried through the loading screen and is locked on the question.
+        if (isJokerAvailable(currentTeam)) {
+            Button doubleChoice = button("", CARD, TEXT);
+            Runnable renderDouble = () -> {
+                doubleChoice.setText(activeJokerSelected ? "⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ ✓" : "⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ");
+                int accent = modeAccent(GameMode.DUEL);
+                doubleChoice.setTextColor(activeJokerSelected ? accent : MUTED);
+                doubleChoice.setBackground(round(CARD, activeJokerSelected ? softOutline(accent) : BORDER, 1, radius()));
+            };
+            renderDouble.run();
+            doubleChoice.setOnClickListener(v -> {
+                activeJokerSelected = !activeJokerSelected;
+                renderDouble.run();
+                saveGameState();
+            });
+            root.addView(doubleChoice, fullMargins(4,0,4,5));
         }
-
-        for (Category c : CATEGORIES) root.addView(categoryRow(c));
-
-        if (specialRemainingCount() > 0) {
-            root.addView(sectionTitle("Special"), fullMargins(0, 7, 0, 2));
-            root.addView(duelSpecialBoardSection(), fullMargins(4, 0, 4, 4));
+        GridLayout categories=new GridLayout(this);categories.setColumnCount(2);
+        String[] ids={"history","geography","science","art","sports","general"};
+        for(String id:ids){
+            Category c=categoryById(id);
+            GridLayout.LayoutParams lp=new GridLayout.LayoutParams();lp.width=0;lp.height=dp(96);
+            lp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
+            lp.setMargins(dp(3),dp(3),dp(3),dp(3));
+            categories.addView(duelCategoryTile(c),lp);
         }
-
-        TextView footer = text("Επίλεξε κανονική ή Special ερώτηση", 13, MUTED, false);
-        footer.setGravity(Gravity.CENTER);
-        root.addView(footer, fullMargins(0, 7, 0, 10));
+        root.addView(categories,fullMargins(0,0,0,5));
+        if(!enabledSpecialTypes.isEmpty()){
+            root.addView(sectionTitle("SPECIAL"),fullMargins(0,0,0,3));
+            root.addView(duelSpecialBoardSection(),fullMargins(0,0,0,2));
+        }
         setStaticScreen(root);
+    }
+
+
+    private View duelCategoryTile(Category c) {
+        int accent=categoryAccent(c);
+        LinearLayout tile=new LinearLayout(this);
+        tile.setOrientation(LinearLayout.VERTICAL);tile.setGravity(Gravity.CENTER);
+        tile.setPadding(dp(4),dp(5),dp(4),dp(5));
+        tile.setBackground(round(categorySoft(c), softOutline(accent), 1, radius()));
+        LinearLayout header=new LinearLayout(this);header.setGravity(Gravity.CENTER);
+        header.addView(categoryGlyph(c.id,accent,26),new LinearLayout.LayoutParams(dp(26),dp(26)));
+        TextView title=text(c.name.toUpperCase(java.util.Locale.forLanguageTag("el")),14,accent,true);
+        title.setSingleLine(true);applyAdaptiveText(title,11,14,true);
+        header.addView(title,new LinearLayout.LayoutParams(0,dp(28),1));
+        tile.addView(header,new LinearLayout.LayoutParams(-1,dp(30)));
+        LinearLayout difficulties=new LinearLayout(this);difficulties.setGravity(Gravity.CENTER);
+        for(int n=1;n<=3;n++){
+            final int m=n;boolean available=!used.contains(key(c.id,n));
+            Button b=button("×"+n,CARD,available?accent:MUTED);b.setTextSize(13);
+            b.setBackground(round(available?CARD:BG,available?softOutline(accent):BORDER,1,8));
+            b.setAlpha(available?1f:0.36f);b.setEnabled(available);
+            b.setOnClickListener(v->showQuestionLoading(questionMap.get(key(c.id,m)),c));
+            difficulties.addView(b,weightedMargins(1,2,0,2,0));
+        }
+        tile.addView(difficulties,new LinearLayout.LayoutParams(-1,dp(38)));
+        return tile;
     }
 
     private View categoryRow(Category c) {
@@ -1836,50 +2096,35 @@ public class MainActivity extends Activity {
     }
 
     private View duelSpecialBoardSection() {
-        LinearLayout card = cardColumn();
-        TextView hint = text("Κοινές επιλογές · όποια ομάδα τις διαλέξει τις παίζει", 11, MUTED, false);
-        hint.setGravity(Gravity.CENTER);
-        card.addView(hint, fullMargins(0, 0, 0, 7));
-        GridLayout grid = new GridLayout(this);
-        grid.setColumnCount(2);
-        String[] types = new String[]{"top5", "find3", "person_id", "country_id", "rank"};
-        for (String type : types) {
-            if (!enabledSpecialTypes.contains(type)) continue;
-            int remaining = Math.max(0, 2 - countOf(specialPlaysUsed, type));
-            if (remaining <= 0) continue;
-            int accent = specialTypeColor(type);
-            FrameLayout specialCell = new FrameLayout(this);
-            Button b = button(specialTypeIcon(type) + "  " + specialTypeLabel(type) + "\n" + remaining + " διαθέσιμ" + (remaining == 1 ? "η" : "ες") + " · έως " + specialMaxPoints(type) + "π", specialTypeSoft(type), accent);
-            b.setTextSize(10);
-            b.setMinHeight(dp(62));
-            b.setGravity(Gravity.CENTER);
-            b.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            b.setIncludeFontPadding(false);
-            b.setPadding(dp(8), 0, dp(34), 0);
-            b.setBackground(round(specialTypeSoft(type), accent, 2, radius()));
-            b.setOnClickListener(v -> startSpecialQuestion(type));
-            specialCell.addView(b, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(62)));
-            Button info = infoButton(specialTypeLabel(type), specialInfo(type), accent);
-            FrameLayout.LayoutParams infoLp = new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.END | Gravity.TOP);
-            infoLp.setMargins(0, dp(4), dp(4), 0);
-            specialCell.addView(info, infoLp);
-            GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
-            lp.width = 0;
-            lp.height = dp(66);
-            lp.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-            lp.setMargins(dp(4), dp(4), dp(4), dp(4));
-            grid.addView(specialCell, lp);
+        GridLayout grid=new GridLayout(this);grid.setColumnCount(2);
+        String[] types={"top5","find3","person_id","country_id","rank","connection"};
+        for(String type:types){
+            if(!enabledSpecialTypes.contains(type))continue;
+            int left=Math.max(0,2-countOf(specialPlaysUsed, type));
+            int accent=specialTypeColor(type);
+            String uses=left==1?"1 χρήση":left+" χρήσεις";
+            Button b=button(specialTypeLabel(type)+"  ·  "+uses, left>0?specialTypeSoft(type):BG,left>0?accent:MUTED);
+            b.setTextSize(11);b.setMinHeight(dp(44));
+            b.setBackground(round(left>0?specialTypeSoft(type):BG,left>0?softOutline(accent):BORDER,1,radius()));
+            b.setEnabled(left>0);
+            b.setAlpha(left>0?1f:0.43f);
+            b.setContentDescription(specialTypeLabel(type)+", "+(left>0?uses:"κλειδωμένο"));
+            if(left>0)b.setOnClickListener(v->startSpecialQuestion(type));
+            GridLayout.LayoutParams lp=new GridLayout.LayoutParams();
+            lp.width=0;lp.height=dp(46);lp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
+            lp.setMargins(dp(3),dp(3),dp(3),dp(3));grid.addView(b,lp);
         }
-        card.addView(grid);
-        return card;
+        return grid;
     }
+
 
     private String specialTypeLabel(String type) {
         if ("top5".equals(type)) return "TOP 5";
         if ("find3".equals(type)) return "ΒΡΕΣ 3";
         if ("person_id".equals(type)) return "PERSON ID";
         if ("country_id".equals(type)) return "COUNTRY ID";
-        if ("rank".equals(type)) return "ΒΑΛΤΑ ΣΕ ΣΕΙΡΑ";
+        if ("rank".equals(type)) return "ΒΑΛ’ ΤΑ ΣΕ ΣΕΙΡΑ";
+        if ("connection".equals(type)) return "ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ";
         return "SPECIAL";
     }
 
@@ -1887,7 +2132,7 @@ public class MainActivity extends Activity {
         if ("top5".equals(type)) return "🏆";
         if ("find3".equals(type)) return "◎";
         if ("person_id".equals(type)) return "👤";
-        if ("country_id".equals(type)) return "🌐";
+        if ("country_id".equals(type)) return "⚑";
         if ("rank".equals(type)) return "↕";
         return "★";
     }
@@ -1930,7 +2175,7 @@ public class MainActivity extends Activity {
         activeSpecialCorrectCount = 0;
         activeSpecialMistakes = 0;
         activeSpecialHintIndex = 0;
-        activeSpecialJokerSelected = false;
+        activeSpecialJokerSelected = activeJokerSelected;
         activeSpecialInteractionStarted = false;
         activeSpecialAnswersVisible = false;
         activeRankOrder.clear();
@@ -1940,7 +2185,7 @@ public class MainActivity extends Activity {
         }
         prepareQuestionTimerForNewQuestion();
         saveGameState();
-        openSpecialQuestion(q);
+        showQuestionTransition(specialTypeLabel(q.type), q.type, specialTypeColor(q.type), () -> openSpecialQuestion(q));
     }
 
     private void openSpecialQuestion(SpecialQuestion q) {
@@ -1953,14 +2198,14 @@ public class MainActivity extends Activity {
         root.addView(gameTopBar(false));
         root.addView(scoreStrip());
 
-        TextView turn = pill("Σειρά: " + currentTeamName(), currentTeam == 0 ? BLUE : RED, CARD, currentTeam == 0 ? BLUE : RED);
+        TextView turn = pill("Σειρά: " + currentTeamName(), teamAccent(currentTeam), CARD, softOutline(teamAccent(currentTeam)));
         turn.setGravity(Gravity.CENTER);
         applyAdaptiveText(turn, 10, 12, true);
         root.addView(turn, centeredWrapMargins(0, 7, 0, 7));
         addQuestionTimer(root);
 
         int accent = specialTypeColor(q.type);
-        TextView mode = pill(specialTypeIcon(q.type) + "  " + specialTypeLabel(q.type) + " · έως " + specialMaxPoints(q.type) + "π", accent, specialTypeSoft(q.type), accent);
+        TextView mode = pill(specialTypeIcon(q.type) + "  " + specialTypeLabel(q.type), accent, CARD, softOutline(accent));
         mode.setGravity(Gravity.CENTER);
         root.addView(mode, centeredWrapMargins(0, 0, 0, 8));
 
@@ -1968,21 +2213,23 @@ public class MainActivity extends Activity {
         prompt.setGravity(Gravity.CENTER);
         prompt.setLineSpacing(dp(4), 1f);
         prompt.setPadding(dp(16), dp(18), dp(16), dp(18));
-        prompt.setBackground(round(CARD, accent, 2, radius()));
-        prompt.setElevation(dp(4));
+        prompt.setBackground(round(CARD, softOutline(accent), 1, radius()));
+        prompt.setElevation(0);
         root.addView(prompt, fullMargins(4, 0, 4, 8));
 
-        if (isJokerAvailable(currentTeam)) {
-            root.addView(withInfoControl(specialJokerButton(), 50, "Διπλασιασμός", "Κάθε ομάδα έχει έναν Διπλασιασμό για όλη την παρτίδα. Διπλασιάζει την αξία της ερώτησης και καταναλώνεται ακόμη κι αν η απάντηση είναι λάθος.", RED), fullMargins(4, 0, 4, 8));
+        if (activeSpecialJokerSelected) {
+            TextView doubled = pill("⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ ΕΝΕΡΓΟΣ", modeAccent(GameMode.DUEL), CARD, BORDER);
+            doubled.setGravity(Gravity.CENTER);
+            root.addView(doubled, centeredWrapMargins(0,0,0,8));
         }
 
         if ("top5".equals(q.type)) renderTop5Special(root, q);
         else if ("find3".equals(q.type)) renderFind3Special(root, q);
         else if ("person_id".equals(q.type) || "country_id".equals(q.type)) renderIdSpecial(root, q);
         else if ("rank".equals(q.type)) renderRankSpecial(root, q);
+        else if ("connection".equals(q.type)) renderConnectionSpecial(root, q);
         else renderMultipleSpecial(root, q);
 
-        root.addView(gameStatusStrip(), fullMargins(4, 8, 4, 24));
         setStaticScreen(root);
     }
 
@@ -2023,9 +2270,6 @@ public class MainActivity extends Activity {
         root.addView(host, fullMargins(4, 2, 4, 5));
         root.addView(specialHostKey(q, "ΔΕΣ ΤΙΣ 5 ΑΠΑΝΤΗΣΕΙΣ"), fullMargins(4, 0, 4, 10));
 
-        TextView help = text("Ο εκφωνητής ελέγχει τη λίστα και στο τέλος δηλώνει το αποτέλεσμα της ομάδας.", 12, MUTED, false);
-        help.setGravity(Gravity.CENTER);
-        root.addView(help, fullMargins(6, 0, 6, 9));
 
         int fivePoints = activeSpecialJokerSelected ? 4 : 2;
         int fourPoints = activeSpecialJokerSelected ? 2 : 1;
@@ -2291,7 +2535,7 @@ public class MainActivity extends Activity {
         root.addView(pts, fullMargins(0, 0, 0, 12));
         root.addView(feedbackAnswerCard(specialAnswerLabel(q), specialAnswerSummary(q), q.explanation),
                 fullMargins(8, 0, 8, 0));
-        root.addView(continueButton(next), fullMargins(4, 18, 4, 4));
+        root.addView(feedbackContinueButton(next), fullMargins(8, 18, 8, 4));
         setStaticScreen(root);
     }
 
@@ -2299,6 +2543,7 @@ public class MainActivity extends Activity {
         if ("rank".equals(q.type)) return "Σωστή σειρά:";
         if ("top5".equals(q.type)) return "Οι 5 απαντήσεις:";
         if ("find3".equals(q.type)) return "Αποδεκτές απαντήσεις:";
+        if ("connection".equals(q.type)) return "Η σύνδεση:";
         return "Απάντηση:";
     }
 
@@ -2332,50 +2577,54 @@ public class MainActivity extends Activity {
 
     // ---------- LOADING TRANSITION ----------
 
+    /** Every new question enters through the same compact category identity screen. */
+    private void showQuestionTransition(String label, String id, int accent, Runnable next) {
+        LinearLayout root = baseColumn();
+        root.addView(topBar(false, false));
+        LinearLayout center = new LinearLayout(this);
+        center.setOrientation(LinearLayout.VERTICAL);
+        center.setGravity(Gravity.CENTER);
+        int visibleAccent = accent;
+        boolean regular = false;
+        for (Category c : CATEGORIES) if (c.id.equals(id)) regular = true;
+        if (regular) {
+            View glyph = categoryGlyph(id, visibleAccent, 88);
+            center.addView(glyph, centeredSize(dp(88), dp(88), 0, 0, 0, 14));
+        } else {
+            String symbol = "☠";
+            if ("top5".equals(id)) symbol = "★";
+            else if ("find3".equals(id)) symbol = "◎";
+            else if ("person_id".equals(id)) symbol = "♟";
+            else if ("country_id".equals(id)) symbol = "⚑";
+            else if ("rank".equals(id)) symbol = "↕";
+            else if ("connection".equals(id)) symbol = "⌁";
+            TextView glyph = text(symbol, 74, visibleAccent, true);
+            glyph.setGravity(Gravity.CENTER);
+            center.addView(glyph, centeredSize(dp(96), dp(100), 0, 0, 0, 12));
+        }
+        TextView title = text(label.toUpperCase(java.util.Locale.forLanguageTag("el")), 22, TEXT, true);
+        title.setGravity(Gravity.CENTER);
+        title.setSingleLine(true);
+        applyAdaptiveText(title, 15, 22, true);
+        center.addView(title);
+        View smallLine = new View(this);
+        smallLine.setBackgroundColor(softOutline(visibleAccent));
+        center.addView(smallLine, centeredSize(dp(64), dp(2), 0, 18, 0, 0));
+        root.addView(center, new LinearLayout.LayoutParams(-1, 0, 1));
+        setStaticScreen(root);
+        // Effects controls animation, not whether the loading identity appears.
+        if (effectsEnabled) center.animate().alpha(1f).setDuration(160).start();
+        handler.postDelayed(next, effectsEnabled ? 560 : 190);
+    }
+
     private void showQuestionLoading(Question q, Category c) {
         if (q == null) return;
         activeQuestionKey = key(q.category, q.multiplier);
         activeQuestionRevealed = false;
-        activeJokerSelected = false;
+        // Preserve the doubling choice from the board; it must not be selectable in-question.
         prepareQuestionTimerForNewQuestion();
         saveGameState();
-
-        if (!effectsEnabled) {
-            openQuestion(q, c);
-            return;
-        }
-
-        LinearLayout root = baseColumn();
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(topBar(false, false));
-
-        TextView spacer = new TextView(this);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, dp(46)));
-
-        int accent = difficultyColor(q.multiplier);
-        TextView icon = text(c.icon, 62, categoryAccent(c), false);
-        icon.setGravity(Gravity.CENTER);
-        icon.setBackground(round(categorySoft(c), categorySoft(c), 0, 100));
-        root.addView(icon, centeredSize(dp(118), dp(118), 0, 6, 0, 14));
-
-        TextView category = text(c.name, 22, TEXT, true);
-        category.setGravity(Gravity.CENTER);
-        root.addView(category, fullMargins(0, 0, 0, 10));
-
-        TextView difficulty = pill(difficultyName(q.multiplier), accent, difficultySoft(q.multiplier), accent);
-        difficulty.setGravity(Gravity.CENTER);
-        root.addView(difficulty, centeredWrapMargins(0, 0, 0, 22));
-
-        TextView loading = text("Ετοιμάζεται η ερώτηση…", 14, MUTED, false);
-        loading.setGravity(Gravity.CENTER);
-        root.addView(loading, fullMargins(0, 0, 0, 12));
-
-        TextView dots = text("●  ●  ●", 16, accent, true);
-        dots.setGravity(Gravity.CENTER);
-        root.addView(dots);
-
-        setStaticScreen(root);
-        handler.postDelayed(() -> openQuestion(q, c), 720);
+        showQuestionTransition(c.name, c.id, categoryAccent(c), () -> openQuestion(q, c));
     }
 
     // ---------- QUESTION ----------
@@ -2391,7 +2640,7 @@ public class MainActivity extends Activity {
         root.addView(gameTopBar(false));
         root.addView(scoreStrip());
 
-        TextView turn = pill("●  Σειρά: " + currentTeamName(), currentTeam == 0 ? BLUE : RED, CARD, currentTeam == 0 ? BLUE : RED);
+        TextView turn = pill("●  Σειρά: " + currentTeamName(), teamAccent(currentTeam), CARD, softOutline(teamAccent(currentTeam)));
         turn.setGravity(Gravity.CENTER);
         applyAdaptiveText(turn, 10, 12, true);
         root.addView(turn, centeredWrapMargins(0, 7, 0, 8));
@@ -2413,11 +2662,6 @@ public class MainActivity extends Activity {
         leftMeta.addView(cat);
         meta.addView(leftMeta, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
 
-        TextView progress = text(answered + "/" + totalDuelQuestions(), 15, TEXT, true);
-        progress.setGravity(Gravity.CENTER);
-        progress.setBackground(round(BG, difficultyColor(q.multiplier), 2, 100));
-        meta.addView(progress, new LinearLayout.LayoutParams(dp(58), dp(58)));
-
         LinearLayout rightMeta = new LinearLayout(this);
         rightMeta.setOrientation(LinearLayout.VERTICAL);
         rightMeta.setGravity(Gravity.END);
@@ -2435,11 +2679,12 @@ public class MainActivity extends Activity {
         questionCard.setPadding(dp(18), dp(20), dp(18), dp(18));
         questionCard.setGravity(Gravity.CENTER);
         questionCard.setMinimumHeight(dp(235));
-        questionCard.setBackground(round(CARD, difficultyColor(q.multiplier), 2, radius()));
-        questionCard.setElevation(dp(5));
+        questionCard.setBackground(round(CARD, softOutline(categoryAccent(c)), 1, radius()));
+        questionCard.setElevation(0);
         questionCard.setCameraDistance(dp(12000));
 
-        TextView pointsText = text("Αξία ερώτησης: " + q.multiplier + " πόντοι", 13, MUTED, false);
+        TextView pointsText = text("", 13, MUTED, false);
+        pointsText.setVisibility(View.GONE);
         final boolean[] answerRevealed = {activeQuestionRevealed};
         if (answerRevealed[0]) renderAnswerFace(questionCard, q, pointsText);
         else renderQuestionFace(questionCard, q, pointsText);
@@ -2453,34 +2698,13 @@ public class MainActivity extends Activity {
         });
         root.addView(questionCard, fullMargins(4, 0, 4, 10));
 
+        // The doubling button is intentionally absent from the opened question.
+        // It was selected (or left off) on the board before the loading transition.
         final boolean[] jokerActive = {activeJokerSelected};
-        if (isJokerAvailable(currentTeam)) {
-            Button joker = button("", RED_SOFT, RED);
-            joker.setMinHeight(dp(52));
-            Runnable drawJoker = () -> {
-                if (jokerActive[0]) {
-                    joker.setText("⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ ΕΝΕΡΓΟΣ · " + q.multiplier + " → " + (q.multiplier * 2));
-                    joker.setTextColor(Color.WHITE);
-                    joker.setBackground(round(RED, RED, 0, radius()));
-                    pointsText.setText("Αξία με Διπλασιασμό: " + (q.multiplier * 2) + " πόντοι");
-                    pointsText.setTextColor(RED);
-                } else {
-                    joker.setText("⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ · ΜΙΑ ΦΟΡΑ");
-                    joker.setTextColor(RED);
-                    joker.setBackground(round(RED_SOFT, RED, 2, radius()));
-                    pointsText.setText("Αξία ερώτησης: " + q.multiplier + " πόντοι");
-                    pointsText.setTextColor(MUTED);
-                }
-            };
-            drawJoker.run();
-            joker.setOnClickListener(v -> {
-                jokerActive[0] = !jokerActive[0];
-                activeJokerSelected = jokerActive[0];
-                drawJoker.run();
-                if (jokerActive[0]) pulse(joker);
-                saveGameState();
-            });
-            root.addView(withInfoControl(joker, 52, "Διπλασιασμός", "Κάθε ομάδα έχει έναν Διπλασιασμό για όλη την παρτίδα. Διπλασιάζει την αξία της ερώτησης και καταναλώνεται ακόμη κι αν η απάντηση είναι λάθος.", RED), fullMargins(4, 0, 4, 10));
+        if (jokerActive[0]) {
+            TextView doubled = pill("⚡ ΔΙΠΛΑΣΙΑΣΜΟΣ ΕΝΕΡΓΟΣ", modeAccent(GameMode.DUEL), CARD, BORDER);
+            doubled.setGravity(Gravity.CENTER);
+            root.addView(doubled, centeredWrapMargins(0,0,0,8));
         }
 
         TextView prompt = text("Η ομάδα το βρήκε;", 16, TEXT, true);
@@ -2489,53 +2713,20 @@ public class MainActivity extends Activity {
 
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
-        int correctAccent = GREEN;
-        int wrongAccent = RED;
-        int correctSoft = GREEN_SOFT;
-        int wrongSoft = RED_SOFT;
-        Button correct = button("✓  ΣΩΣΤΟ", correctSoft, correctAccent);
-        correct.setBackground(round(correctSoft, correctAccent, 2, radius()));
-        correct.setMinHeight(dp(62));
-        Button wrong = button("✕  ΛΑΘΟΣ", wrongSoft, wrongAccent);
-        wrong.setBackground(round(wrongSoft, wrongAccent, 2, radius()));
-        wrong.setMinHeight(dp(62));
+        Button correct = button("✓  ΣΩΣΤΟ", CARD, TEXT);
+        correct.setBackground(round(CARD, softOutline(GREEN), 1, radius()));
+        correct.setMinHeight(dp(56));
+        Button wrong = button("✕  ΛΑΘΟΣ", CARD, TEXT);
+        wrong.setBackground(round(CARD, softOutline(RED), 1, radius()));
+        wrong.setMinHeight(dp(56));
         actions.addView(correct, weightedMargins(1, 4, 0, 4, 0));
         actions.addView(wrong, weightedMargins(1, 4, 4, 0, 0));
         root.addView(actions, fullMargins(0, 0, 0, 10));
 
-        root.addView(gameStatusStrip(), fullMargins(4, 0, 4, 8));
-        root.addView(matchProgressTrack(), fullMargins(4, 0, 4, 30));
 
         wrong.setOnClickListener(v -> resolveOpenAnswer(q, false, jokerActive[0]));
         correct.setOnClickListener(v -> resolveOpenAnswer(q, true, jokerActive[0]));
         setStaticScreen(root);
-    }
-
-    private View gameStatusStrip() {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
-        row.setBackground(round(CARD, BORDER, 1, radius()));
-        row.setPadding(dp(8), dp(9), dp(8), dp(9));
-        row.setElevation(dp(3));
-        TextView played = text("Ερωτήσεις  " + answered + " / " + totalDuelQuestions(), 12, TEXT, true);
-        played.setGravity(Gravity.CENTER);
-        row.addView(played, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
-        return row;
-    }
-
-    private View matchProgressTrack() {
-        LinearLayout row = new LinearLayout(this);
-        row.setGravity(Gravity.CENTER);
-        int total = totalDuelQuestions();
-        int normalSize = total > 24 ? 6 : 9;
-        int activeSize = total > 24 ? 8 : 12;
-        for (int i = 1; i <= total; i++) {
-            boolean done = i <= answered;
-            TextView dot = text(done ? "●" : "○", i == answered ? activeSize : normalSize, done ? (i % 2 == 1 ? BLUE : RED) : MUTED, true);
-            dot.setGravity(Gravity.CENTER);
-            row.addView(dot, new LinearLayout.LayoutParams(0, dp(18), 1));
-        }
-        return row;
     }
 
     private void resolveOpenAnswer(Question q, boolean correct, boolean usedJoker) {
@@ -2675,7 +2866,7 @@ public class MainActivity extends Activity {
             root.addView(confetti);
         }
 
-        root.addView(continueButton(next), fullMargins(4, 18, 4, 4));
+        root.addView(feedbackContinueButton(next), fullMargins(8, 18, 8, 4));
         setStaticScreen(root);
     }
 
@@ -2700,9 +2891,9 @@ public class MainActivity extends Activity {
         return box;
     }
 
-    // Result screens wait for the players instead of closing on a timer.
-    private Button continueButton(Runnable next) {
-        Button b = primaryButton("ΣΥΝΕΧΕΙΑ", PURPLE);
+    // Duel result screens wait for the players instead of closing on a timer.
+    private Button feedbackContinueButton(Runnable next) {
+        Button b = primaryButton("ΣΥΝΕΧΕΙΑ  →", modeAccent(gameMode));
         b.setOnClickListener(v -> {
             v.setEnabled(false); // a double tap must not advance twice
             next.run();
@@ -2794,7 +2985,7 @@ public class MainActivity extends Activity {
         boolean sudden = rule == TieRule.SUDDEN_DEATH;
         int accent = (sudden ? RED : GREEN);
         int soft = (sudden ? RED_SOFT : GREEN_SOFT);
-        String title = sudden ? "🔪🩸  ΞΑΦΝΙΚΟΣ ΘΑΝΑΤΟΣ" : "🤝  ΙΣΟΠΑΛΙΑ";
+        String title = sudden ? "☠  ΞΑΦΝΙΚΟΣ ΘΑΝΑΤΟΣ" : "ΙΣΟΠΑΛΙΑ";
         String detail = sudden ? "Tie-break μέχρι να υπάρξει νικητής" : "Τέλος τώρα · χωρίς νικητή";
         b.setText((selected ? "✓  " : "") + title + "\n" + detail);
         b.setTextSize(13);
@@ -2865,65 +3056,54 @@ public class MainActivity extends Activity {
     }
 
     private void showWinner(int winnerTeam, boolean suddenDeath, boolean earlyFinish) {
-        if (gameMode == GameMode.CLASSIC) {
-            showClassicWinner(winnerTeam, suddenDeath);
-            return;
-        }
+        showUnifiedWinner(winnerTeam);
+    }
+
+    /** One winner design for Duel, Classic, and Four Cheeses. */
+    private void showUnifiedWinner(int team) {
         clearSavedGame();
-        LinearLayout root = baseColumn();
-        root.setGravity(Gravity.CENTER_HORIZONTAL);
-        root.addView(topBar(false, false));
-        if (hapticsEnabled) {
-            try { getWindow().getDecorView().performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); } catch (Throwable ignored) { }
-        }
+        applyTheme(prefs.getString("theme", THEME_LIGHT));
         playVictoryMusic();
-
-        TextView confetti = text(effectsEnabled ? "✦  🎉  ✦" : "🏆", 42, ORANGE, false);
-        confetti.setGravity(Gravity.CENTER);
-        root.addView(confetti, fullMargins(0, 26, 0, 6));
-
-        TextView cup = text("🏆", 62, ORANGE, false);
-        cup.setGravity(Gravity.CENTER);
-        root.addView(cup, fullMargins(0, 0, 0, 8));
-
-        String winnerName = winnerTeam == 0 ? teamA : teamB;
-        TextView title = text("ΝΙΚΗΤΕΣ!", 30, ORANGE, true);
-        title.setGravity(Gravity.CENTER);
-        root.addView(title);
-        TextView name = text(winnerName, 24, winnerTeam == 0 ? BLUE : RED, true);
-        name.setGravity(Gravity.CENTER);
-        root.addView(name, fullMargins(0, 2, 0, 8));
-
-        if (earlyFinish) {
-            TextView locked = pill("Η νίκη κλείδωσε μαθηματικά", ORANGE, ORANGE_SOFT, ORANGE);
-            locked.setGravity(Gravity.CENTER);
-            root.addView(locked, centeredWrapMargins(0, 0, 0, 8));
-        } else if (suddenDeath) {
-            TextView sd = pill("Νίκη στο Sudden Death", PURPLE, PURPLE_SOFT, PURPLE);
-            sd.setGravity(Gravity.CENTER);
-            root.addView(sd, centeredWrapMargins(0, 0, 0, 8));
-        }
-
-        TextView finalScore = text(teamA + "  " + scoreA + "  —  " + scoreB + "  " + teamB, 20, TEXT, true);
-        finalScore.setGravity(Gravity.CENTER);
-        root.addView(finalScore, fullMargins(0, 0, 0, 14));
-
-        LinearLayout stats = cardColumn();
-        stats.addView(statLine("Σωστές", String.valueOf(correctA), String.valueOf(correctB)));
-        stats.addView(ruleDivider());
-        stats.addView(ruleDivider());
-        stats.addView(statLine("Καλύτερη κατηγορία", bestCategory(categoryCorrectA), bestCategory(categoryCorrectB)));
-        root.addView(stats, fullMargins(4, 0, 4, 14));
-
-        Button again = primaryButton("ΠΑΙΞΕ ΞΑΝΑ", BLUE);
-        again.setOnClickListener(v -> { resetTeamNamesToDefault(); showSetup(); });
-        root.addView(again, fullMargins(4, 0, 4, 24));
+        LinearLayout root=baseColumn();
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setPadding(dp(16),dp(10),dp(16),dp(12));
+        FrameLayout artwork = new FrameLayout(this);
+        ImageView hero=new ImageView(this);
+        hero.setImageResource(isDarkTheme() ? R.drawable.poster_winner_dark : R.drawable.poster_winner_light);
+        hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        hero.setAdjustViewBounds(true);
+        hero.setContentDescription("Ο Σκεπτόμενος σηκώνει τη γροθιά του");
+        root.setTag("winner_full_height");
+        hero.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        hero.setAdjustViewBounds(false);
+        artwork.addView(hero, new FrameLayout.LayoutParams(-1, -1));
+        View back = backArrowButton(true);
+        back.setOnClickListener(v -> showHome());
+        FrameLayout.LayoutParams backParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP | Gravity.START);
+        artwork.addView(back, backParams);
+        root.addView(artwork,new LinearLayout.LayoutParams(-1,0,1f));
+        TextView winner=text("ΝΙΚΗΤΗΣ",34,TEXT,true);
+        winner.setTypeface(brandTypeface());winner.setGravity(Gravity.CENTER);
+        root.addView(winner,fullMargins(0,6,0,0));
+        TextView name=text(team==0?teamA:teamB,30,teamAccent(team),true);
+        name.setGravity(Gravity.CENTER);applyAdaptiveText(name,16,30,true);
+        root.addView(name,fullMargins(0,3,0,15));
+        Button replay=modeStartButton(gameMode);
+        replay.setText("ΠΑΙΞΕ ΞΑΝΑ  →");
+        replay.setOnClickListener(v->{
+            resetTeamNamesToDefault();
+            if(gameMode==GameMode.CHEESE)showCheeseSetup();
+            else if(gameMode==GameMode.CLASSIC){classicTargetPerCategory=2;showClassicSetup();}
+            else showSetup();
+        });
+        root.addView(replay,fullMargins(4,0,4,12));
         setStaticScreen(root);
     }
 
     private static final String[] SUDDEN_MODES = new String[]{"tf", "multiple", "over_under", "ab", "closest"};
 
     private void showSuddenDeathIntro() {
+        applyTheme(prefs.getString("theme", THEME_LIGHT));
         if (!inSuddenDeath) {
             inSuddenDeath = true;
             suddenStarted = false;
@@ -2941,7 +3121,7 @@ public class MainActivity extends Activity {
         LinearLayout root = baseColumn();
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.addView(gameTopBar(false));
-        TextView bolt = text("⚡", 62, PURPLE, false);
+        TextView bolt = text("☠", 62, TEXT, false);
         bolt.setGravity(Gravity.CENTER);
         root.addView(bolt, fullMargins(0, 28, 0, 8));
         TextView title = text("ΞΑΦΝΙΚΟΣ ΘΑΝΑΤΟΣ", 28, TEXT, true);
@@ -2951,15 +3131,6 @@ public class MainActivity extends Activity {
         tied.setGravity(Gravity.CENTER);
         root.addView(tied, fullMargins(0, 4, 0, 14));
 
-        LinearLayout info = cardColumn();
-        TextView rules = text("1. Γύρισε τη ρουλέτα.\n2. Παίξτε τη δοκιμασία που θα κληρωθεί.\n3. Αν μία ομάδα κερδίσει, κερδίζει την παρτίδα.\n4. Αν μείνετε ισόπαλοι, γυρίστε ξανά.", 15, TEXT, false);
-        rules.setGravity(Gravity.CENTER);
-        rules.setLineSpacing(dp(4), 1f);
-        info.addView(rules);
-        TextView modes = text("ΣΩΣΤΟ / ΛΑΘΟΣ  ·  ΠΟΛΛΑΠΛΗΣ ΕΠΙΛΟΓΗΣ  ·  OVER / UNDER\nΔΙΑΛΕΞΕ ΤΟ ΣΩΣΤΟ  ·  ΠΙΟ ΚΟΝΤΑ ΚΕΡΔΙΖΕΙ", 11, MUTED, true);
-        modes.setGravity(Gravity.CENTER);
-        info.addView(modes, fullMargins(0, 10, 0, 0));
-        root.addView(info, fullMargins(4, 0, 4, 16));
 
         Button start = primaryButton("ΣΤΗ ΡΟΥΛΕΤΑ", PURPLE);
         start.setOnClickListener(v -> {
@@ -2976,6 +3147,7 @@ public class MainActivity extends Activity {
     }
 
     private void showSuddenRoulette() {
+        applyTheme(prefs.getString("theme", THEME_LIGHT));
         suddenStarted = true;
         suddenMode = "";
         activeSuddenQuestionId = "";
@@ -2991,13 +3163,13 @@ public class MainActivity extends Activity {
         LinearLayout root = baseColumn();
         root.setGravity(Gravity.CENTER_HORIZONTAL);
         root.addView(gameTopBar(false));
-        root.addView(gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip(), fullMargins(4, 0, 4, 8));
+        root.addView(gameMode == GameMode.CHEESE ? cheeseScores() : (gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip()), fullMargins(4, 0, 4, 8));
 
         TextView round = pill("Ξαφνικός Θάνατος · Γύρος " + suddenRound, PURPLE, PURPLE_SOFT, PURPLE);
         round.setGravity(Gravity.CENTER);
         root.addView(round, centeredWrapMargins(0, 6, 0, 10));
 
-        TextView title = text("ΤΙ ΘΑ ΠΑΙΞΕΤΕ;", 20, TEXT, true);
+        TextView title = text("☠  ΞΑΦΝΙΚΟΣ ΘΑΝΑΤΟΣ", 20, TEXT, true);
         title.setGravity(Gravity.CENTER);
         root.addView(title, fullMargins(0, 0, 0, 8));
 
@@ -3018,7 +3190,9 @@ public class MainActivity extends Activity {
                 suddenTeam = (suddenRound - 1) % 2;
                 activeSuddenQuestionId = "";
                 saveGameState();
-                showSuddenModeReveal(suddenMode);
+                spin.setText("ΔΕΣ ΤΟ ΑΠΟΤΕΛΕΣΜΑ  →");
+                spin.setEnabled(true);
+                spin.setOnClickListener(t -> showSuddenModeReveal(suddenMode));
             });
         });
         root.addView(spin, fullMargins(8, 0, 8, 24));
@@ -3045,11 +3219,10 @@ public class MainActivity extends Activity {
         Button modeInfoButton = infoButton(suddenModeLabel(mode), suddenModeInfo(mode), accent);
         pickedTitleRow.addView(modeInfoButton, new LinearLayout.LayoutParams(dp(40), dp(40)));
         root.addView(pickedTitleRow, fullMargins(22, 0, 22, 8));
-        TextView detail = text("closest".equals(mode) ? "Κοινή ερώτηση · απαντούν και οι δύο" : "Μία διαφορετική ερώτηση για κάθε ομάδα", 14, TEXT, false);
-        detail.setGravity(Gravity.CENTER);
-        root.addView(detail);
+        Button next=primaryButton("ΣΥΝΕΧΕΙΑ  →",modeAccent(gameMode));
+        next.setOnClickListener(v->startCurrentSuddenRound());
+        root.addView(next,fullMargins(8,18,8,22));
         setStaticScreen(root);
-        handler.postDelayed(this::startCurrentSuddenRound, effectsEnabled ? 950 : 180);
     }
 
     private void startCurrentSuddenRound() {
@@ -3122,15 +3295,17 @@ public class MainActivity extends Activity {
             activeSuddenQuestionId = q.id;
             prepareQuestionTimerForNewQuestion();
             saveGameState();
+            showQuestionTransition("Ξαφνικός Θάνατος", "sudden", TEXT, this::showSuddenQuestion);
+            return;
         }
         final SuddenQuestion current = q;
         String playingTeam = suddenTeam == 0 ? teamA : teamB;
-        int teamAccent = suddenTeam == 0 ? BLUE : RED;
+        int teamAccent = teamAccent(suddenTeam);
         int accent = suddenModeColor(suddenMode);
 
         LinearLayout root = baseColumn();
         root.addView(gameTopBar(false));
-        root.addView(gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip(), fullMargins(4, 0, 4, 8));
+        root.addView(gameMode == GameMode.CHEESE ? cheeseScores() : (gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip()), fullMargins(4, 0, 4, 8));
         TextView round = pill("Γύρος " + suddenRound + " · " + suddenModeLabel(suddenMode), accent, suddenModeSoft(suddenMode), accent);
         round.setGravity(Gravity.CENTER);
         root.addView(round, centeredWrapMargins(0, 4, 0, 7));
@@ -3144,8 +3319,8 @@ public class MainActivity extends Activity {
         prompt.setGravity(Gravity.CENTER);
         prompt.setLineSpacing(dp(4), 1f);
         prompt.setPadding(dp(16), dp(24), dp(16), dp(24));
-        prompt.setBackground(round(CARD, accent, 2, radius()));
-        prompt.setElevation(dp(5));
+        prompt.setBackground(round(CARD, softOutline(accent), 1, radius()));
+        prompt.setElevation(0);
         root.addView(prompt, fullMargins(4, 0, 4, 12));
 
         for (int i = 0; i < current.options.length; i++) {
@@ -3157,9 +3332,6 @@ public class MainActivity extends Activity {
             option.setOnClickListener(v -> resolveSuddenChoice(current, idx));
             root.addView(option, fullMargins(5, 4, 5, 4));
         }
-        TextView note = text("Η επιλογή κλειδώνει μόλις πατηθεί.", 11, MUTED, false);
-        note.setGravity(Gravity.CENTER);
-        root.addView(note, fullMargins(0, 7, 0, 24));
         setStaticScreen(root);
     }
 
@@ -3199,8 +3371,10 @@ public class MainActivity extends Activity {
             ex.setGravity(Gravity.CENTER);
             root.addView(ex, fullMargins(10, 0, 10, 0));
         }
+        Button continueButton=primaryButton("ΣΥΝΕΧΕΙΑ  →",modeAccent(gameMode));
+        continueButton.setOnClickListener(v->next.run());
+        root.addView(continueButton,fullMargins(8,24,8,24));
         setStaticScreen(root);
-        handler.postDelayed(next, revealEnabled ? 720 : 120);
     }
 
     private void continueSuddenAfterIndividualAnswer(int answeredTeam) {
@@ -3247,8 +3421,10 @@ public class MainActivity extends Activity {
         TextView sub = text("Πάλι στη ρουλέτα.", 17, PURPLE, true);
         sub.setGravity(Gravity.CENTER);
         root.addView(sub, fullMargins(0, 8, 0, 0));
+        Button next=primaryButton("ΣΥΝΕΧΕΙΑ  →",modeAccent(gameMode));
+        next.setOnClickListener(v->showSuddenRoulette());
+        root.addView(next,fullMargins(8,20,8,24));
         setStaticScreen(root);
-        handler.postDelayed(this::showSuddenRoulette, effectsEnabled ? 850 : 150);
     }
 
     private void showClosestSudden() {
@@ -3260,6 +3436,8 @@ public class MainActivity extends Activity {
             activeSuddenQuestionId = q.id;
             prepareQuestionTimerForNewQuestion();
             saveGameState();
+            showQuestionTransition("Ξαφνικός Θάνατος", "sudden", TEXT, this::showClosestSudden);
+            return;
         }
         final SuddenQuestion current = q;
         if (suddenClosestResolved) {
@@ -3270,7 +3448,7 @@ public class MainActivity extends Activity {
         }
         LinearLayout root = baseColumn();
         root.addView(gameTopBar(false));
-        root.addView(gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip(), fullMargins(4, 0, 4, 8));
+        root.addView(gameMode == GameMode.CHEESE ? cheeseScores() : (gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip()), fullMargins(4, 0, 4, 8));
         TextView round = pill("Γύρος " + suddenRound + " · ΠΙΟ ΚΟΝΤΑ", PURPLE, PURPLE_SOFT, PURPLE);
         round.setGravity(Gravity.CENTER);
         root.addView(round, centeredWrapMargins(0, 4, 0, 8));
@@ -3280,11 +3458,11 @@ public class MainActivity extends Activity {
         prompt.setGravity(Gravity.CENTER);
         prompt.setLineSpacing(dp(4), 1f);
         prompt.setPadding(dp(16), dp(22), dp(16), dp(22));
-        prompt.setBackground(round(CARD, PURPLE, 2, radius()));
-        prompt.setElevation(dp(5));
+        prompt.setBackground(round(CARD, softOutline(PURPLE), 1, radius()));
+        prompt.setElevation(0);
         root.addView(prompt, fullMargins(4, 0, 4, 12));
 
-        TextView host = text("Ο εκφωνητής γράφει τις δύο απαντήσεις και μετά τις αποκαλύπτει.", 12, MUTED, false);
+        TextView host = text("", 12, MUTED, false);
         host.setGravity(Gravity.CENTER);
         root.addView(host, fullMargins(8, 0, 8, 10));
 
@@ -3294,10 +3472,10 @@ public class MainActivity extends Activity {
         b.setText(suddenClosestInputB);
         bindClosestInput(a, true);
         bindClosestInput(b, false);
-        root.addView(labeledInput(teamA, a, BLUE), fullMargins(5, 0, 5, 8));
-        root.addView(labeledInput(teamB, b, RED), fullMargins(5, 0, 5, 12));
+        root.addView(labeledInput(teamA, a, teamAccent(0)), fullMargins(5, 0, 5, 8));
+        root.addView(labeledInput(teamB, b, teamAccent(1)), fullMargins(5, 0, 5, 12));
 
-        Button reveal = primaryButton("ΑΠΟΚΑΛΥΨΗ & ΕΛΕΓΧΟΣ", PURPLE);
+        Button reveal = primaryButton("ΕΛΕΓΧΟΣ ΑΠΑΝΤΗΣΕΩΝ", PURPLE);
         reveal.setOnClickListener(v -> {
             Double valueA = parseHostNumber(a.getText().toString());
             Double valueB = parseHostNumber(b.getText().toString());
@@ -3391,16 +3569,15 @@ public class MainActivity extends Activity {
             TextView tied = text("ΙΔΙΑ ΑΠΟΣΤΑΣΗ", 22, PURPLE, true);
             tied.setGravity(Gravity.CENTER);
             root.addView(tied, fullMargins(0, 0, 0, 6));
-            TextView again = text("Δεν υπάρχει νικητής · επιστροφή στη ρουλέτα…", 13, MUTED, true);
-            again.setGravity(Gravity.CENTER);
-            root.addView(again, fullMargins(8, 0, 8, 24));
-            handler.postDelayed(this::advanceSuddenWithoutWinner, effectsEnabled ? 1200 : 250);
+            Button again = primaryButton("ΣΥΝΕΧΕΙΑ  →",modeAccent(gameMode));
+            again.setOnClickListener(v->advanceSuddenWithoutWinner());
+            root.addView(again,fullMargins(8,14,8,24));
         } else {
-            TextView win = text("ΠΙΟ ΚΟΝΤΑ: " + (winner == 0 ? teamA : teamB), 22, winner == 0 ? BLUE : RED, true);
+            TextView win = text("ΠΙΟ ΚΟΝΤΑ: " + (winner == 0 ? teamA : teamB), 22, winner == 0 ? BLUE : ORANGE, true);
             win.setGravity(Gravity.CENTER);
             applyAdaptiveText(win, 13, 22, true);
             root.addView(win, fullMargins(0, 0, 0, 10));
-            Button finish = primaryButton("ΝΙΚΗΤΗΣ · " + (winner == 0 ? teamA : teamB), winner == 0 ? BLUE : RED);
+            Button finish = primaryButton("ΝΙΚΗΤΗΣ · " + (winner == 0 ? teamA : teamB), winner == 0 ? BLUE : ORANGE);
             finish.setOnClickListener(v -> showWinner(winner, true, false));
             root.addView(finish, fullMargins(8, 0, 8, 24));
         }
@@ -3504,7 +3681,7 @@ public class MainActivity extends Activity {
             float delta = (desiredMod - currentMod + 360f) % 360f;
             float target = rotation + 360f * 7f + delta;
             ValueAnimator animator = ValueAnimator.ofFloat(rotation, target);
-            animator.setDuration(effectsEnabled ? 4500L : 500L);
+            animator.setDuration(7000L);
             animator.setInterpolator(new DecelerateInterpolator());
             animator.addUpdateListener(a -> {
                 rotation = (float) a.getAnimatedValue();
@@ -3522,10 +3699,17 @@ public class MainActivity extends Activity {
 
     private void showLiveScore() {
         LinearLayout root = baseColumn();
-        Runnable back = gameMode == GameMode.CLASSIC ? this::showClassicBoard : this::showBoard;
+        Runnable back = gameMode == GameMode.CLASSIC ? this::showClassicBoard : (gameMode == GameMode.CHEESE ? this::showCheeseBoard : this::showBoard);
         root.addView(simpleBackBar("Σκορ", back));
 
-        if (gameMode == GameMode.CLASSIC) {
+        if (gameMode == GameMode.CHEESE) {
+            root.addView(cheeseScores(),fullMargins(4,0,4,10));
+            for(int i=0;i<CHEESE_IDS.length;i++){
+                Category c=categoryById(CHEESE_IDS[i]);
+                int owner=cheese.owner(i);
+                root.addView(statLine(c.name,cheese.progress[0][i]+"/2",cheese.progress[1][i]+"/2"),fullMargins(4,2,4,2));
+            }
+        } else if (gameMode == GameMode.CLASSIC) {
             root.addView(classicCompactScoreStrip(), fullMargins(4, 0, 4, 10));
             LinearLayout progress = new LinearLayout(this);
             progress.setOrientation(LinearLayout.HORIZONTAL);
@@ -3547,10 +3731,6 @@ public class MainActivity extends Activity {
             root.addView(abilities, fullMargins(4, 0, 4, 10));
         } else {
             root.addView(scoreStrip());
-            TextView progress = pill(answered + " / " + totalDuelQuestions() + " ερωτήσεις", ORANGE, ORANGE_SOFT, ORANGE);
-            progress.setGravity(Gravity.CENTER);
-            root.addView(progress, centeredWrapMargins(0, 8, 0, 10));
-
             LinearLayout stats = cardColumn();
             stats.addView(statLine("Σωστές", String.valueOf(correctA), String.valueOf(correctB)));
             stats.addView(ruleDivider());
@@ -3569,60 +3749,27 @@ public class MainActivity extends Activity {
     // ---------- SETTINGS ----------
 
     private void showSettings() {
-        LinearLayout root = baseColumn();
+        LinearLayout root=baseColumn();
         root.addView(settingsTopBar());
-        root.addView(sectionTitle("Εμφάνιση"), fullMargins(0, 4, 0, 6));
-
-        LinearLayout themeCard = cardColumn();
-        TextView themeLabel = text("Θέμα εμφάνισης", 15, TEXT, true);
-        themeCard.addView(themeLabel, fullMargins(0, 0, 0, 8));
-
-        GridLayout themeGrid = new GridLayout(this);
-        themeGrid.setColumnCount(2);
-        addThemeGridButton(themeGrid, themeButton("☀  Light", THEME_LIGHT));
-        addThemeGridButton(themeGrid, themeButton("☾  Dark", THEME_DARK));
-        themeCard.addView(themeGrid);
-        root.addView(themeCard, fullMargins(4, 0, 4, 14));
-
-        root.addView(sectionTitle("Χρόνος ερώτησης"), fullMargins(0, 0, 0, 6));
-        LinearLayout timerCard = cardColumn();
-        TextView timerHint = text("Ισχύει σε Μονομαχία και Κλασικό. Το Off παίζει χωρίς χρονικό όριο.", 11, MUTED, false);
-        timerHint.setGravity(Gravity.CENTER);
-        timerCard.addView(timerHint, fullMargins(0, 0, 0, 8));
-        LinearLayout timerRow = new LinearLayout(this);
-        timerRow.setOrientation(LinearLayout.HORIZONTAL);
-        timerRow.addView(timerChoiceButton("Off", 0), weightedMargins(1, 2, 0, 2, 0));
-        timerRow.addView(timerChoiceButton("30″", 30), weightedMargins(1, 2, 0, 2, 0));
-        timerRow.addView(timerChoiceButton("45″", 45), weightedMargins(1, 2, 0, 2, 0));
-        timerRow.addView(timerChoiceButton("60″", 60), weightedMargins(1, 2, 0, 2, 0));
-        timerCard.addView(timerRow);
-        root.addView(timerCard, fullMargins(4, 0, 4, 14));
-
-        root.addView(sectionTitle("Εμπειρία"), fullMargins(0, 0, 0, 6));
-        LinearLayout experience = cardColumn();
-        experience.addView(settingSwitch("Μαθηματικό τέλος", "Αυτόματο τέλος όταν δεν υπάρχει μαθηματικά ισοπαλία ή ανατροπή", earlyFinishEnabled, value -> {
-            earlyFinishEnabled = value;
-            prefs.edit().putBoolean("early_finish", value).apply();
-            if (gameActive) saveGameState();
-        }));
-        experience.addView(ruleDivider());
-        experience.addView(settingSwitch("Κλοπή στο Κλασικό", "Κλείσ' την όταν και οι δύο παίκτες βλέπουν την απάντηση στην ίδια οθόνη", classicStealEnabled, value -> {
-            classicStealEnabled = value;
-            prefs.edit().putBoolean("classic_steal_enabled", value).apply();
-            if (gameActive) saveGameState();
-        }));
-        experience.addView(ruleDivider());
-        experience.addView(settingSwitch("Εφέ", "Animations, ήχοι, δόνηση, loading, flip feedback, τελευταία ερώτηση και confetti", effectsEnabled, value -> {
-            effectsEnabled = value;
-            revealEnabled = value;
-            finalQuestionEnabled = value;
-            soundEnabled = value;
-            hapticsEnabled = value;
-            prefs.edit().putBoolean("effects", value).apply();
-        }));
-        root.addView(experience, fullMargins(4, 0, 4, 24));
+        root.addView(sectionTitle("Θέμα"),fullMargins(0,5,0,6));
+        LinearLayout themes=cardColumn();
+        GridLayout grid=new GridLayout(this);grid.setColumnCount(2);
+        addThemeGridButton(grid,themeButton("LIGHT",THEME_LIGHT));
+        addThemeGridButton(grid,themeButton("DARK",THEME_DARK));
+        themes.addView(grid);
+        root.addView(themes,fullMargins(4,0,4,12));
+        root.addView(sectionTitle("Χρόνος"),fullMargins(0,0,0,6));
+        LinearLayout choices=cardColumn();
+        LinearLayout row=new LinearLayout(this);row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(timerChoiceButton("OFF",0),weightedMargins(1,2,0,2,0));
+        row.addView(timerChoiceButton("30″",30),weightedMargins(1,2,0,2,0));
+        row.addView(timerChoiceButton("45″",45),weightedMargins(1,2,0,2,0));
+        row.addView(timerChoiceButton("60″",60),weightedMargins(1,2,0,2,0));
+        choices.addView(row);
+        root.addView(choices,fullMargins(4,0,4,12));
         setStaticScreen(root);
     }
+
 
     private void addThemeGridButton(GridLayout grid, Button button) {
         GridLayout.LayoutParams lp = new GridLayout.LayoutParams();
@@ -3674,7 +3821,7 @@ public class MainActivity extends Activity {
         TextView d = text(description, 11, MUTED, false);
         d.setPadding(0, dp(2), dp(8), 0);
         copy.addView(t);
-        copy.addView(d);
+        if (!description.isEmpty()) copy.addView(d);
         row.addView(copy, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Switch toggle = new Switch(this);
         toggle.setChecked(checked);
@@ -3712,18 +3859,20 @@ public class MainActivity extends Activity {
     }
 
     private TextView gameBrandTitle() {
-        TextView title = text("ΚΟΥΙΖΑΡΑ", 28, TEXT, true);
-        title.setTypeface(brandTypeface());
-        title.setGravity(Gravity.CENTER);
-        title.setIncludeFontPadding(false);
-        SpannableString brand = new SpannableString("ΚΟΥΙΖΑΡΑ");
-        brand.setSpan(new ForegroundColorSpan(GREEN), 5, 6, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        brand.setSpan(new ForegroundColorSpan(ORANGE), 6, 7, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        brand.setSpan(new ForegroundColorSpan(RED), 7, 8, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        title.setText(brand);
-        if (isDarkTheme()) title.setShadowLayer(dp(2), 0f, dp(1), Color.argb(120, 0, 0, 0));
-        return title;
+        TextView logo = text("QUIZARA", 28, TEXT, true);
+        logo.setGravity(Gravity.CENTER);
+        logo.setTypeface(brandTypeface());
+        logo.setSingleLine(true);
+        logo.setIncludeFontPadding(true);
+        logo.setPadding(dp(4), dp(2), dp(4), dp(2));
+        applyAdaptiveText(logo, 20, 28, true);
+        SpannableString wordmark = new SpannableString("QUIZARA");
+        int highlight = isDarkTheme() ? Color.rgb(168, 0, 255) : Color.rgb(255, 81, 0);
+        wordmark.setSpan(new ForegroundColorSpan(highlight), 4, 7, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        logo.setText(wordmark);
+        return logo;
     }
+
 
     private void confirmExitGame() {
         pauseQuestionTimer();
@@ -3839,9 +3988,9 @@ public class MainActivity extends Activity {
 
         View left = backArrowButton(showBack);
         if (showBack) left.setOnClickListener(v -> {
-            if (settingsSource == ScreenSource.SETUP) showModeSelect();
-            else if (settingsSource == ScreenSource.CLASSIC_SETUP) showClassicDurationSelect();
+            if (settingsSource == ScreenSource.SETUP || settingsSource == ScreenSource.CLASSIC_SETUP || !gameActive) showModeSelect();
             else if (settingsSource == ScreenSource.CLASSIC_BOARD || gameMode == GameMode.CLASSIC) showClassicBoard();
+            else if (gameMode == GameMode.CHEESE) showCheeseBoard();
             else showBoard();
         });
         line.addView(left, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -3862,7 +4011,7 @@ public class MainActivity extends Activity {
         View back = backArrowButton(true);
         back.setOnClickListener(v -> showHome());
         line.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView title = text("Ρυθμίσεις", 23, TEXT, true);
+        TextView title = gameBrandTitle();
         title.setGravity(Gravity.CENTER);
         line.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
         View spacer = new View(this);
@@ -3871,43 +4020,30 @@ public class MainActivity extends Activity {
     }
 
     private View scoreStrip() {
-        LinearLayout line = new LinearLayout(this);
-        line.setOrientation(LinearLayout.HORIZONTAL);
-        line.setGravity(Gravity.CENTER);
-        line.addView(scoreCard(teamA, scoreA, BLUE, 0), new LinearLayout.LayoutParams(0, dp(92), 1));
-        int vsAccent = ORANGE;
-        TextView vs = text("VS", 18, vsAccent, true);
-        vs.setGravity(Gravity.CENTER);
-        vs.setBackground(round(CARD, vsAccent, 1, 100));
-        line.addView(vs, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        line.addView(scoreCard(teamB, scoreB, RED, 1), new LinearLayout.LayoutParams(0, dp(92), 1));
-        return line;
+        LinearLayout row=new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(scoreCard(teamA,scoreA,teamAccent(0),0),new LinearLayout.LayoutParams(0,dp(88),1));
+        TextView vs=text("VS",14,MUTED,true);vs.setGravity(Gravity.CENTER);
+        row.addView(vs,new LinearLayout.LayoutParams(dp(40),dp(48)));
+        row.addView(scoreCard(teamB,scoreB,teamAccent(1),1),new LinearLayout.LayoutParams(0,dp(88),1));
+        return row;
     }
+
 
     private View scoreCard(String name, int score, int accent, int team) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setGravity(Gravity.CENTER);
-        card.setPadding(dp(8), dp(7), dp(8), dp(7));
-        int actualAccent = accent;
-        int stroke = currentTeam == team && answered < totalDuelQuestions() ? (actualAccent) : BORDER;
-        int fill = (isDarkTheme() ? CARD : (team == 0 ? BLUE_SOFT : RED_SOFT));
-        card.setBackground(round(fill, stroke, currentTeam == team ? 2 : 1, radius()));
-        card.setElevation(dp(currentTeam == team ? 5 : 3));
-
-        TextView n = text(name, 13, actualAccent, true);
-        n.setGravity(Gravity.CENTER);
-        applyAdaptiveText(n, 9, 13, true);
-        TextView s = text(String.valueOf(score), 34, TEXT, false);
-        s.setGravity(Gravity.CENTER);
-        card.addView(n);
-        card.addView(s);
-
-        TextView joker = text(isJokerAvailable(team) ? "⚡ ΔΙΠΛ." : "ΔΙΠΛ. ✓", 9, isJokerAvailable(team) ? (RED) : MUTED, true);
-        joker.setGravity(Gravity.CENTER);
-        card.addView(joker);
+        LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.VERTICAL);
+        card.setGravity(Gravity.CENTER);card.setPadding(dp(5),dp(8),dp(5),dp(8));
+        boolean active=currentTeam==team;
+        card.setBackground(round(active?teamTint(team):CARD,teamAccent(team),active?3:1,radius()));
+        card.setElevation(dp(active?5:1));
+        TextView title=text((active?"▶  ":"")+name,14,teamAccent(team),true);
+        title.setSingleLine(true);applyAdaptiveText(title,10,14,true);card.addView(title);
+        card.addView(text(String.valueOf(score),30,TEXT,true));
+        TextView joker=text(isJokerAvailable(team)?"⚡ ΔΙΠΛ.":"ΔΙΠΛ. ✓",10,teamAccent(team),true);
+        joker.setGravity(Gravity.CENTER);card.addView(joker);
         return card;
     }
+
 
     private View turnDots(int played, int accent) {
         LinearLayout dots = new LinearLayout(this);
@@ -3921,6 +4057,130 @@ public class MainActivity extends Activity {
             dots.addView(d, new LinearLayout.LayoutParams(dp(width), dp(16)));
         }
         return dots;
+    }
+
+    /** Subtle accent strokes on gameplay surfaces; full color stays in Home and category identity. */
+    private int softOutline(int accent) {
+        float weight = isDarkTheme() ? 0.40f : 0.42f;
+        return Color.rgb(
+                Math.round(Color.red(CARD) * (1 - weight) + Color.red(accent) * weight),
+                Math.round(Color.green(CARD) * (1 - weight) + Color.green(accent) * weight),
+                Math.round(Color.blue(CARD) * (1 - weight) + Color.blue(accent) * weight));
+    }
+
+    private int teamAccent(int team) {
+        int idx = team == 0 ? teamColorA : teamColorB;
+        final int[] normal = {0xFFE53935, 0xFFFF6500, 0xFFF3BC24, 0xFF159B55, 0xFF0645D9, 0xFF913FE0};
+        final int[] dark = {0xFFE8A3A5, 0xFFE2AF8C, 0xFFDACB93, 0xFFA0D4B8, 0xFFA4BAE8, 0xFFC5A4E7};
+        return (isDarkTheme() ? dark : normal)[Math.max(0, Math.min(5, idx))];
+    }
+
+    private int teamTint(int team) {
+        int c=teamAccent(team);
+        float a = isDarkTheme() ? 0.18f : 0.075f;
+        return Color.rgb((int)(Color.red(c)*a + Color.red(CARD)*(1-a)),
+                (int)(Color.green(c)*a + Color.green(CARD)*(1-a)),
+                (int)(Color.blue(c)*a + Color.blue(CARD)*(1-a)));
+    }
+
+    /** One reusable team-settings design shared by Duel, Classic and Four Cheeses. */
+    private View teamColorSettings(EditText a, EditText b) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(teamColorSetupCard(0, a), weightedMargins(1, 0, 0, 4, 0));
+        row.addView(teamColorSetupCard(1, b), weightedMargins(1, 4, 0, 0, 0));
+        return row;
+    }
+
+    private View teamColorSetupCard(int team, EditText input) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(dp(7), dp(9), dp(7), dp(9));
+        card.setBackground(round(CARD, teamAccent(team), 2, radius()));
+        TextView title = text(team==0 ? "ΟΜΑΔΑ Α" : "ΟΜΑΔΑ Β", 14, teamAccent(team), true);
+        title.setGravity(Gravity.CENTER);
+        card.addView(title, fullMargins(0,0,0,7));
+        input.setTextSize(15);
+        card.addView(input, new LinearLayout.LayoutParams(-1, dp(44)));
+        LinearLayout swatches = new LinearLayout(this);
+        swatches.setGravity(Gravity.CENTER);
+        for (int i = 0; i < 6; i++) {
+            final int selected = i;
+            int color = teamSwatchColor(i);
+            View square = new View(this);
+            square.setBackground(round(color, i == (team == 0 ? teamColorA : teamColorB) ? TEXT : color,
+                    i == (team == 0 ? teamColorA : teamColorB) ? 3 : 1, 4));
+            square.setContentDescription("Χρώμα " + (i + 1) + " για ομάδα " + (team == 0 ? "Α" : "Β"));
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(0, dp(25), 1);
+            sp.setMargins(dp(2), 0, dp(2), 0);
+            swatches.addView(square, sp);
+            square.setOnClickListener(v -> {
+                // Both teams must always have different colors.
+                int previous = team == 0 ? teamColorA : teamColorB;
+                if (team == 0) {
+                    if (teamColorB == selected) teamColorB = previous;
+                    teamColorA = selected;
+                } else {
+                    if (teamColorA == selected) teamColorA = previous;
+                    teamColorB = selected;
+                }
+                prefs.edit().putInt("team_color_a",teamColorA).putInt("team_color_b",teamColorB).apply();
+                refreshTeamColorCards();
+            });
+        }
+        card.addView(swatches, fullMargins(0, 10, 0, 0));
+        liveSwatches[team] = swatches;
+        liveTeamCards[team] = card;
+        liveTeamTitles[team] = title;
+        return card;
+    }
+
+    private void refreshTeamColorCards() {
+        for (int team=0;team<2;team++) {
+            LinearLayout row=liveSwatches[team];
+            LinearLayout card=liveTeamCards[team];
+            TextView title=liveTeamTitles[team];
+            if (row==null || card==null || title==null) continue;
+            int selected=team==0?teamColorA:teamColorB;
+            card.setBackground(round(CARD,teamAccent(team),2,radius()));
+            title.setTextColor(teamAccent(team));
+            for (int j=0;j<row.getChildCount();j++) {
+                View chip=row.getChildAt(j);
+                int color=teamSwatchColor(j);
+                chip.setBackground(round(color,j==selected?TEXT:color,j==selected?3:1,4));
+            }
+        }
+    }
+
+    private int teamSwatchColor(int index) {
+        return new int[]{0xFFE53935, 0xFFFF6500, 0xFFF3C623, 0xFF159B55, 0xFF0645D9, 0xFF913FE0}[index];
+    }
+
+    private int modeAccent(GameMode mode) {
+        if (mode == GameMode.DUEL) return isDarkTheme() ? Color.rgb(174, 105, 251) : Color.rgb(19, 19, 18);
+        if (mode == GameMode.CLASSIC) return isDarkTheme() ? Color.rgb(255, 214, 0) : Color.rgb(255, 81, 0);
+        return isDarkTheme() ? Color.rgb(0, 221, 208) : Color.rgb(3, 55, 216);
+    }
+
+    private Button modeStartButton(GameMode mode) {
+        int accent=modeAccent(mode);
+        int ink = isDarkTheme() ? Color.BLACK : Color.WHITE;
+        Button start = button("ΕΝΑΡΞΗ  →",accent,ink);
+        start.setMinHeight(dp(62));
+        start.setBackground(new PosterDrawable(accent));
+        start.setTypeface(uiTypeface(true));
+        start.setTextSize(23);
+        return start;
+    }
+
+    private TextView turnBanner(String name, int team) {
+        int accent = teamAccent(team);
+        TextView t = pill("ΠΑΙΖΟΥΝ ΟΙ " + name.toUpperCase(java.util.Locale.forLanguageTag("el")),
+                accent, teamTint(team), softOutline(accent));
+        t.setPadding(dp(12),dp(7),dp(12),dp(7));
+        t.setGravity(Gravity.CENTER);
+        applyAdaptiveText(t, 10, 14, true);
+        return t;
     }
 
     private View teamSetupWideCard(String label, String iconText, EditText input, int accent, int soft) {
@@ -4028,7 +4288,7 @@ public class MainActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(14), dp(14), dp(14), dp(14));
         card.setBackground(round(CARD, BORDER, 1, radius()));
-        card.setElevation(dp(4));
+        card.setElevation(0);
         card.setGravity(Gravity.CENTER_HORIZONTAL);
         return card;
     }
@@ -4123,7 +4383,7 @@ public class MainActivity extends Activity {
 
     private String modeInfo(String mode) {
         if ("duel".equals(mode)) return "Δύο ομάδες παίζουν εναλλάξ στις 6 βασικές κατηγορίες. Κάθε κατηγορία έχει ×1, ×2 και ×3. Μπορείς να ενεργοποιήσεις Special κατηγορίες και κάθε ομάδα έχει έναν Διπλασιασμό για μία ερώτηση.";
-        return "Οι παίκτες επιλέγουν ανάμεσα σε 2 κατηγορίες. Σωστή απάντηση σημαίνει ότι ο ίδιος συνεχίζει. Στόχος είναι να συμπληρωθούν 1, 2 ή 3 σωστές απαντήσεις σε καθεμία από τις 6 κατηγορίες, ανάλογα με τη διάρκεια.";
+        return "Σε κάθε γύρο επιλέγεις μία από δύο διαθέσιμες κατηγορίες. Στόχος: δύο σωστές σε καθεμία από τις έξι κατηγορίες.";
     }
 
     private String specialInfo(String type) {
@@ -4155,11 +4415,12 @@ public class MainActivity extends Activity {
     }
 
     private Button primaryButton(String label, int accent) {
-        Button b = button(label, accent, Color.WHITE);
+        int ink = isDarkTheme() && accent==ORANGE ? Color.rgb(21,17,30) : Color.WHITE;
+        Button b = button(label, accent, ink);
         b.setMinHeight(dp(58));
         b.setTextSize(17);
-        b.setBackground(round(accent, accent, 0, radius()));
-        b.setElevation(dp(6));
+        b.setBackground(new PosterDrawable(accent));
+        b.setElevation(0);
         return b;
     }
 
@@ -4175,7 +4436,7 @@ public class MainActivity extends Activity {
         b.setBackground(round(bgColor, bgColor, 0, radius()));
         b.setMinHeight(dp(48));
         b.setStateListAnimator(null);
-        b.setElevation(dp(4));
+        b.setElevation(0);
         b.setSoundEffectsEnabled(false);
         attachPressAnimation(b);
         return b;
@@ -4199,16 +4460,14 @@ public class MainActivity extends Activity {
     }
 
     private Typeface uiTypeface(boolean bold) {
-        try {
-            return Typeface.create("sans-serif-rounded", bold ? Typeface.BOLD : Typeface.NORMAL);
-        } catch (Throwable ignored) {
-            return Typeface.create(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
-        }
+        try { return Typeface.create("sans-serif-condensed", bold ? Typeface.BOLD : Typeface.NORMAL); }
+        catch (Throwable ignored) { return Typeface.create(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL); }
     }
+
 
     private Typeface brandTypeface() {
         try {
-            return Typeface.create("sans-serif-black", Typeface.BOLD);
+            return Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC);
         } catch (Throwable ignored) {
             return Typeface.DEFAULT_BOLD;
         }
@@ -4223,6 +4482,7 @@ public class MainActivity extends Activity {
         return t;
     }
 
+
     private LinearLayout baseColumn() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -4232,6 +4492,7 @@ public class MainActivity extends Activity {
     }
 
     private void setStaticScreen(LinearLayout content) {
+        if (inSuddenDeath && !suddenStarted) tensionShake(content);
         FitScreenLayout frame = new FitScreenLayout();
         frame.setBackgroundColor(BG);
         frame.setClipChildren(true);
@@ -4266,7 +4527,10 @@ public class MainActivity extends Activity {
             View child = getChildAt(0);
             int availableWidth = Math.max(1, width - getPaddingLeft() - getPaddingRight());
             int childWidthSpec = MeasureSpec.makeMeasureSpec(availableWidth, MeasureSpec.EXACTLY);
-            int childHeightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+            int availableHeight = Math.max(1, height - getPaddingTop() - getPaddingBottom());
+            int childHeightSpec = "winner_full_height".equals(child.getTag())
+                    ? MeasureSpec.makeMeasureSpec(availableHeight, MeasureSpec.EXACTLY)
+                    : MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
             child.measure(childWidthSpec, childHeightSpec);
         }
 
@@ -4289,26 +4553,10 @@ public class MainActivity extends Activity {
         }
     }
 
+    // No vertical scrolling anywhere in the game. The existing FitScreenLayout
+    // fits content to the viewport, keeping controls reachable on small phones.
     private void setScrollable(LinearLayout content) {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setClipToPadding(false);
-        scroll.setBackgroundColor(BG);
-        scroll.addView(content, new ScrollView.LayoutParams(ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));
-        scroll.setOnApplyWindowInsetsListener((v, insets) -> {
-            try {
-                int left = insets.getSystemWindowInsetLeft();
-                int top = insets.getSystemWindowInsetTop();
-                int right = insets.getSystemWindowInsetRight();
-                int bottom = insets.getSystemWindowInsetBottom();
-                scroll.setPadding(left, top + dp(10), right, bottom + dp(18));
-            } catch (Throwable ignored) {
-                scroll.setPadding(0, dp(26), 0, dp(26));
-            }
-            return insets;
-        });
-        setContentView(scroll);
-        scroll.requestApplyInsets();
+        setStaticScreen(content);
     }
 
     private GradientDrawable round(int fill, int stroke, int strokeDp, int radiusDp) {
@@ -4324,7 +4572,7 @@ public class MainActivity extends Activity {
     }
 
     private int radius() {
-        return 15;
+        return 3;
     }
 
     // ---------- GAME LOGIC HELPERS ----------
@@ -4509,7 +4757,7 @@ public class MainActivity extends Activity {
         question.setLineSpacing(dp(3), 1f);
         question.setPadding(dp(2), dp(6), dp(2), dp(14));
         card.addView(question);
-        pointsText.setText(activeJokerSelected ? "Αξία με Διπλασιασμό: " + (q.multiplier * 2) + " πόντοι" : "Αξία ερώτησης: " + q.multiplier + " πόντοι");
+        
         pointsText.setTextColor(activeJokerSelected ? RED : MUTED);
         pointsText.setGravity(Gravity.CENTER);
         card.addView(pointsText);
@@ -4533,7 +4781,7 @@ public class MainActivity extends Activity {
             explanation.setGravity(Gravity.CENTER);
             card.addView(explanation, fullMargins(0, 9, 0, 10));
         }
-        pointsText.setText(activeJokerSelected ? "Αξία με Διπλασιασμό: " + (q.multiplier * 2) + " πόντοι" : "Αξία ερώτησης: " + q.multiplier + " πόντοι");
+        
         pointsText.setTextColor(activeJokerSelected ? RED : MUTED);
         pointsText.setGravity(Gravity.CENTER);
         card.addView(pointsText);
@@ -4584,6 +4832,7 @@ public class MainActivity extends Activity {
     }
 
     private void resetGame() {
+        selectDuelQuestions();
         gameMode = GameMode.DUEL;
         gameActive = true;
         activeQuestionKey = "";
@@ -4629,7 +4878,6 @@ public class MainActivity extends Activity {
         suddenClosestValueB = 0d;
         suddenUsedQuestionIds.clear();
         used.clear();
-        pickDuelBoard();
     }
 
     private String currentTeamName() {
@@ -4647,14 +4895,14 @@ public class MainActivity extends Activity {
         teamB = DEFAULT_TEAM_B;
     }
 
-    private String key(String category, int multiplier) {
-        return category + "_" + multiplier;
-    }
-
     // Map.getOrDefault needs Android 7 (API 24); minSdk is 23.
     private static int countOf(Map<String, Integer> map, String key) {
         Integer value = map.get(key);
         return value == null ? 0 : value;
+    }
+
+    private String key(String category, int multiplier) {
+        return category + "_" + multiplier;
     }
 
     private void confirmDiscardThen(Runnable action) {
@@ -4678,7 +4926,9 @@ public class MainActivity extends Activity {
         try {
             SharedPreferences.Editor e = prefs.edit();
             e.putBoolean("game_active", true);
-            e.putString("game_mode", gameMode == GameMode.CLASSIC ? "classic" : "duel");
+            e.putString("game_duel_selection", new JSONArray(duelSelection).toString());
+            e.putString("game_mode", gameMode == GameMode.CHEESE ? "cheese" : gameMode == GameMode.CLASSIC ? "classic" : "duel");
+            if (gameMode == GameMode.CHEESE) saveCheese(e);
             e.putString("game_tie_rule", tieRule == TieRule.DRAW ? "draw" : "sudden_death");
             e.putBoolean("game_tie_choice_pending", tieChoicePending);
             e.putString("game_team_a", teamA);
@@ -4769,7 +5019,9 @@ public class MainActivity extends Activity {
         if (prefs == null || !prefs.getBoolean("game_active", false)) return false;
         try {
             gameActive = true;
-            gameMode = "classic".equals(prefs.getString("game_mode", "duel")) ? GameMode.CLASSIC : GameMode.DUEL;
+            gameMode = "cheese".equals(prefs.getString("game_mode", "duel")) ? GameMode.CHEESE : "classic".equals(prefs.getString("game_mode", "duel")) ? GameMode.CLASSIC : GameMode.DUEL;
+            if (gameMode == GameMode.CHEESE) loadCheese();
+            if (gameMode == GameMode.DUEL && prefs.contains("game_duel_selection")) restoreDuelQuestions(new JSONArray(prefs.getString("game_duel_selection", "[]")));
             tieRule = "draw".equals(prefs.getString("game_tie_rule", "sudden_death")) ? TieRule.DRAW : TieRule.SUDDEN_DEATH;
             tieChoicePending = prefs.getBoolean("game_tie_choice_pending", false);
             teamA = prefs.getString("game_team_a", DEFAULT_TEAM_A);
@@ -4854,7 +5106,7 @@ public class MainActivity extends Activity {
             shuffleAvailableB = prefs.getBoolean("game_classic_shuffle_b", true);
             changeQuestionAvailableA = prefs.getBoolean("game_classic_change_a", true);
             changeQuestionAvailableB = prefs.getBoolean("game_classic_change_b", true);
-            classicTargetPerCategory = Math.max(1, Math.min(3, prefs.getInt("game_classic_target_per_category", 2)));
+            classicTargetPerCategory = 2;
             classicQuestionsPlayedA = Math.max(0, prefs.getInt("game_classic_played_a", 0));
             classicQuestionsPlayedB = Math.max(0, prefs.getInt("game_classic_played_b", 0));
             classicFinalChance = prefs.getBoolean("game_classic_final_chance", false);
