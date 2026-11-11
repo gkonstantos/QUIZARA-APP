@@ -8,14 +8,14 @@ the questions aloud. It works fully offline: no account, no ads, no permissions.
 ## Features
 
 ### Game modes
-- **⚔ Μονομαχία (Duel)**: teams take turns on a board of 18 questions, one per category at ×1
+- **⚔ Σπέσιαλ (formerly Μονομαχία)**: teams take turns on a board of 18 questions, one per category at ×1
   (easy), ×2 (medium) and ×3 (hard) points. Every game deals a fresh random board from the
   question bank, and a saved game keeps its board. Optional **Special** rounds (each can be played
   twice):
 
   | Special | How it plays | Points |
   |---|---|---|
-  | 🏆 TOP 5 | Name the 5 answers in a list | 5/5 = 2, stopped at 4/5 = 1 |
+  | 🏆 TOP 5 | Name the 5 answers in a list | 5/5 = 3, stopped at 4/5 = 2 |
   | ◎ ΒΡΕΣ 3 | Name any 3 of the accepted answers | 2 |
   | 👤 PERSON ID | Guess the person from up to 3 clues | 3 / 2 / 1 by clue |
   | 🌐 COUNTRY ID | Guess the country from up to 3 clues | 3 / 2 / 1 by clue |
@@ -42,16 +42,17 @@ the questions aloud. It works fully offline: no account, no ads, no permissions.
 | Set | Questions |
 |---|---|
 | Classic / 4 Τυριά | 3,449 |
-| Duel | 3,449 |
-| Duel Specials | 720 |
+| Σπέσιαλ board | 3,449 |
+| Σπέσιαλ Specials | 720 |
 | Sudden Death | 250 |
 
 ### Also
-- **Διπλασιασμός (×2)**: each Duel team can double the value of one question per game.
+- **Διπλασιασμός (×2)**: in Σπέσιαλ each team can double the value of one question per game.
 - **Μαθηματικό τέλος**: a game ends early once the trailing team can no longer catch up.
 - Team names and colours, an optional question timer (30 / 45 / 60 s), light and dark themes, and
   automatic save and resume.
-- Duel result screens show the correct answer and wait for **ΣΥΝΕΧΕΙΑ**, so everyone can read it.
+- Σπέσιαλ result screens show the correct answer and wait for **ΣΥΝΕΧΕΙΑ**, so everyone can read it.
+- ⓘ buttons explain each one-use action (Διπλασιασμός, Ανακάτεμα, Σαμποτάζ) where you use it.
 
 Runs on **Android 6.0 or newer**. The interface and the questions are in Greek.
 
@@ -135,9 +136,11 @@ build-preview.sh                           Gradle-free build script
 ## Version
 
 **0.11.9** (version code 33): the 0.11.8 redesign (poster home screen, 4 Τυριά, ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ,
-team colours, new icon) merged with:
+team colours, new icon) and its follow-up polish (Μονομαχία renamed Σπέσιαλ, TOP 5 worth 3/2,
+coloured answer buttons, ⓘ help on actions, new category icons) merged with:
 - result screens that wait for **ΣΥΝΕΧΕΙΑ** and always show the answer;
 - sounds that no longer freeze the screen when cards flip, and a smoother roulette;
 - a fix for a crash on Android 6;
 - default team names **Ομάδα 1** / **Ομάδα 2**;
+- early finish that accounts for TOP 5's new 3 points;
 - the Excel converter, Gradle wrapper and CI build.
