@@ -136,6 +136,9 @@ build-preview.sh                           Gradle-free build script
 
 ## Version
 
+**0.12.7** (version code 48): launcher icon redrawn from the new home poster (circles instead of
+triangles); the round icon is now actually round, and the drawn-in grey frame is gone.
+
 **0.12.6** (version code 47): ported from the colleague's 0.12.5 build: drawn line icons instead of
 emoji for the Specials and Sudden Death modes, new circle-style posters, a stable 2-column Special
 board, a Sudden Death transition that shows the drawn mode, filled cheese wedges in 4 Τυριά, centred
