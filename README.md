@@ -126,6 +126,7 @@ would be left without the questions it needs.
 ```
 app/src/main/java/.../MainActivity.java   the game (plain Java, no libraries)
 app/src/main/java/.../CheeseGame.java     4 Τυριά rules, independent of Android
+app/src/main/java/.../QuizaraIcons.java   drawn icons for the Special and Sudden Death modes
 app/src/main/assets/                       question banks (JSON)
 app/src/main/res/                          posters, logos, sounds, launcher icons, theme
 tools/excel_to_json.py                     Excel → JSON converter
@@ -134,6 +135,13 @@ build-preview.sh                           Gradle-free build script
 ```
 
 ## Version
+
+**0.12.6** (version code 47): ported from the colleague's 0.12.5 build: drawn line icons instead of
+emoji for the Specials and Sudden Death modes, new circle-style posters, a stable 2-column Special
+board, a Sudden Death transition that shows the drawn mode, filled cheese wedges in 4 Τυριά, centred
+scores, and a red "closest number" round. Their ΒΑΛ' ΤΑ ΣΕ ΣΕΙΡΑ tap-to-continue screen was not
+ported: every Special result screen here already shows the correct order and waits for ΣΥΝΕΧΕΙΑ.
+The version code is above their 0.12.5.1 (46) so this build can update theirs.
 
 **0.11.10** (version code 34): 4 Τυριά turns alternate after every question, "Last Dance" is now
 **Τελευταία Ευκαιρία** with an explanatory popup, and the turn banner shows only the team name.

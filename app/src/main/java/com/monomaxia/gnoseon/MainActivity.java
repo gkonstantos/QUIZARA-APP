@@ -580,6 +580,16 @@ public class MainActivity extends Activity {
 
     private View cheeseScores() { return cheeseScores(-1); }
 
+    /** Four wedges, filled for each cheese the team has won: "▲  ▲  △  △". */
+    private String cheeseWedges(int won) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 4; i++) {
+            if (i > 0) sb.append("  ");
+            sb.append(i < won ? "▲" : "△");
+        }
+        return sb.toString();
+    }
+
     private View cheeseScores(int winningTeam) {
         LinearLayout row=new LinearLayout(this);row.setGravity(Gravity.CENTER_VERTICAL);
         for(int t=0;t<2;t++) {
@@ -593,7 +603,7 @@ public class MainActivity extends Activity {
             applyAdaptiveText(name,10,14,true);card.addView(name);
             int count=t==winningTeam?4:cheese.count(t);
             TextView score=text(count+" / 4",26,TEXT,true);score.setGravity(Gravity.CENTER);card.addView(score);
-            TextView wedges=text("△  △  △  △",13,teamAccent(t),true);
+            TextView wedges=text(cheeseWedges(count),13,teamAccent(t),true);
             wedges.setGravity(Gravity.CENTER);card.addView(wedges);
             row.addView(card,weightedMargins(1,t==0?0:4,0,t==0?4:0,0));
         }
@@ -1227,7 +1237,7 @@ public class MainActivity extends Activity {
             toggle.setBackground(round(specialTypeSoft(type),specialTypeColor(type),2,radius()));
             toggle.setOnClickListener(v -> {
                 boolean on = !Boolean.TRUE.equals(chosen.get(type)); chosen.put(type,on);
-                toggle.setText((on?"✓  ":"○  ")+specialTypeLabel(type));
+                QuizaraIcons.setText(toggle,(on?"✓  ":"○  ")+specialTypeLabel(type));
                 toggle.setTextColor(on?specialTypeColor(type):MUTED);
                 toggle.setBackground(round(on?specialTypeSoft(type):CARD,on?specialTypeColor(type):BORDER,on?2:1,radius()));
             });
@@ -2109,7 +2119,7 @@ public class MainActivity extends Activity {
 
     private void styleSpecialToggle(Button b, String type, boolean selected) {
         int accent = specialTypeColor(type);
-        b.setText((selected ? "✓  " : "○  ") + specialTypeLabel(type));
+        QuizaraIcons.setText(b, (selected ? "✓  " : "○  ") + specialTypeLabel(type));
         b.setTextSize(11);
         b.setTextColor(selected ? accent : MUTED);
         b.setGravity(Gravity.CENTER);
@@ -2121,6 +2131,7 @@ public class MainActivity extends Activity {
 
     private View duelSpecialBoardSection() {
         GridLayout grid=new GridLayout(this);grid.setColumnCount(2);
+        grid.setAlignmentMode(GridLayout.ALIGN_MARGINS);
         String[] types={"top5","find3","person_id","country_id","rank","connection"};
         for(String type:types){
             if(!enabledSpecialTypes.contains(type))continue;
@@ -2135,7 +2146,11 @@ public class MainActivity extends Activity {
             b.setContentDescription(specialTypeLabel(type)+", "+(left>0?uses:"κλειδωμένο"));
             if(left>0)b.setOnClickListener(v->startSpecialQuestion(type));
             GridLayout.LayoutParams lp=new GridLayout.LayoutParams();
-            lp.width=0;lp.height=dp(46);lp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);
+            // Explicit cells keep every card the same size in a stable 2-column layout.
+            int cell=grid.getChildCount();
+            lp.width=0;lp.height=dp(46);
+            lp.rowSpec=GridLayout.spec(cell/2,GridLayout.FILL);
+            lp.columnSpec=GridLayout.spec(cell%2,1,GridLayout.FILL,1f);
             lp.setMargins(dp(3),dp(3),dp(3),dp(3));grid.addView(b,lp);
         }
         return grid;
@@ -2153,12 +2168,7 @@ public class MainActivity extends Activity {
     }
 
     private String specialTypeIcon(String type) {
-        if ("top5".equals(type)) return "🏆";
-        if ("find3".equals(type)) return "◎";
-        if ("person_id".equals(type)) return "👤";
-        if ("country_id".equals(type)) return "⚑";
-        if ("rank".equals(type)) return "↕";
-        return "★";
+        return QuizaraIcons.symbol(type);
     }
 
     private int specialTypeColor(String type) {
@@ -2605,7 +2615,14 @@ public class MainActivity extends Activity {
 
     /** Every new question enters through the same compact category identity screen. */
     private void showQuestionTransition(String label, String id, int accent, Runnable next) {
+        // Sudden Death shows the roulette mode that was drawn, not a generic Sudden Death screen.
+        if ("sudden".equals(id)) {
+            id = suddenMode;
+            label = suddenModeLabel(id);
+            accent = suddenModeColor(id);
+        }
         LinearLayout root = baseColumn();
+        root.setTag("winner_full_height");
         root.addView(topBar(false, false));
         LinearLayout center = new LinearLayout(this);
         center.setOrientation(LinearLayout.VERTICAL);
@@ -2617,18 +2634,13 @@ public class MainActivity extends Activity {
             View glyph = categoryGlyph(id, visibleAccent, 88);
             center.addView(glyph, centeredSize(dp(88), dp(88), 0, 0, 0, 14));
         } else {
-            String symbol = "☠";
-            if ("top5".equals(id)) symbol = "★";
-            else if ("find3".equals(id)) symbol = "◎";
-            else if ("person_id".equals(id)) symbol = "♟";
-            else if ("country_id".equals(id)) symbol = "⚑";
-            else if ("rank".equals(id)) symbol = "↕";
-            else if ("connection".equals(id)) symbol = "⌁";
-            TextView glyph = text(symbol, 74, visibleAccent, true);
+            TextView glyph = text(QuizaraIcons.symbol(id), 74, visibleAccent, true);
             glyph.setGravity(Gravity.CENTER);
             center.addView(glyph, centeredSize(dp(96), dp(100), 0, 0, 0, 12));
         }
-        TextView title = text(label.toUpperCase(java.util.Locale.forLanguageTag("el")), 22, TEXT, true);
+        String upperLabel = label.toUpperCase(java.util.Locale.forLanguageTag("el"));
+        TextView title = text(upperLabel, 22, TEXT, true);
+        title.setText(upperLabel); // plain text: the big icon above already identifies the mode
         title.setGravity(Gravity.CENTER);
         title.setSingleLine(true);
         applyAdaptiveText(title, 15, 22, true);
@@ -2636,7 +2648,13 @@ public class MainActivity extends Activity {
         View smallLine = new View(this);
         smallLine.setBackgroundColor(softOutline(visibleAccent));
         center.addView(smallLine, centeredSize(dp(64), dp(2), 0, 18, 0, 0));
-        root.addView(center, new LinearLayout.LayoutParams(-1, 0, 1));
+        // Overlay the top bar on a full-height stage so the identity sits in the true screen centre.
+        View bar = root.getChildAt(0);
+        root.removeView(bar);
+        FrameLayout stage = new FrameLayout(this);
+        stage.addView(center, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
+        stage.addView(bar, new FrameLayout.LayoutParams(-1, -2, Gravity.TOP));
+        root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         setStaticScreen(root);
         // Effects controls animation, not whether the loading identity appears.
         if (effectsEnabled) center.animate().alpha(1f).setDuration(160).start();
@@ -3262,20 +3280,18 @@ public class MainActivity extends Activity {
         return "ΠΙΟ ΚΟΝΤΑ ΚΕΡΔΙΖΕΙ";
     }
 
+    // First line is the mode's icon; RouletteView draws it via QuizaraIcons.drawText.
     private String suddenModeWheelLabel(String mode) {
-        if ("tf".equals(mode)) return "ΣΩΣΤΟ\nΛΑΘΟΣ";
-        if ("multiple".equals(mode)) return "ΠΟΛΛΑΠΛΗΣ\nΕΠΙΛΟΓΗΣ";
-        if ("over_under".equals(mode)) return "OVER\nUNDER";
-        if ("ab".equals(mode)) return "ΔΙΑΛΕΞΕ\nΤΟ ΣΩΣΤΟ";
-        return "ΠΙΟ ΚΟΝΤΑ\nΚΕΡΔΙΖΕΙ";
+        String icon = QuizaraIcons.symbol(mode) + "\n";
+        if ("tf".equals(mode)) return icon + "ΣΩΣΤΟ\nΛΑΘΟΣ";
+        if ("multiple".equals(mode)) return icon + "ΠΟΛΛΑΠΛΗΣ\nΕΠΙΛΟΓΗΣ";
+        if ("over_under".equals(mode)) return icon + "OVER\nUNDER";
+        if ("ab".equals(mode)) return icon + "ΔΙΑΛΕΞΕ\nΤΟ ΣΩΣΤΟ";
+        return icon + "ΠΙΟ ΚΟΝΤΑ\nΚΕΡΔΙΖΕΙ";
     }
 
     private String suddenModeIcon(String mode) {
-        if ("tf".equals(mode)) return "✓✕";
-        if ("multiple".equals(mode)) return "☑";
-        if ("over_under".equals(mode)) return "↕";
-        if ("ab".equals(mode)) return "⇄";
-        return "◎";
+        return QuizaraIcons.symbol(mode);
     }
 
     private int suddenModeColor(String mode) {
@@ -3473,7 +3489,7 @@ public class MainActivity extends Activity {
         LinearLayout root = baseColumn();
         root.addView(gameTopBar(false));
         root.addView(gameMode == GameMode.CHEESE ? cheeseScores() : (gameMode == GameMode.CLASSIC ? classicCompactScoreStrip() : scoreStrip()), fullMargins(4, 0, 4, 8));
-        TextView round = pill("Γύρος " + suddenRound + " · ΠΙΟ ΚΟΝΤΑ", PURPLE, PURPLE_SOFT, PURPLE);
+        TextView round = pill("Γύρος " + suddenRound + " · ΠΙΟ ΚΟΝΤΑ", RED, RED_SOFT, RED);
         round.setGravity(Gravity.CENTER);
         root.addView(round, centeredWrapMargins(0, 4, 0, 8));
         addQuestionTimer(root);
@@ -3482,7 +3498,7 @@ public class MainActivity extends Activity {
         prompt.setGravity(Gravity.CENTER);
         prompt.setLineSpacing(dp(4), 1f);
         prompt.setPadding(dp(16), dp(22), dp(16), dp(22));
-        prompt.setBackground(round(CARD, softOutline(PURPLE), 1, radius()));
+        prompt.setBackground(round(CARD, softOutline(RED), 1, radius()));
         prompt.setElevation(0);
         root.addView(prompt, fullMargins(4, 0, 4, 12));
 
@@ -3499,7 +3515,7 @@ public class MainActivity extends Activity {
         root.addView(labeledInput(teamA, a, teamAccent(0)), fullMargins(5, 0, 5, 8));
         root.addView(labeledInput(teamB, b, teamAccent(1)), fullMargins(5, 0, 5, 12));
 
-        Button reveal = primaryButton("ΕΛΕΓΧΟΣ ΑΠΑΝΤΗΣΕΩΝ", PURPLE);
+        Button reveal = primaryButton("ΕΛΕΓΧΟΣ ΑΠΑΝΤΗΣΕΩΝ", RED);
         reveal.setOnClickListener(v -> {
             Double valueA = parseHostNumber(a.getText().toString());
             Double valueB = parseHostNumber(b.getText().toString());
@@ -3579,7 +3595,7 @@ public class MainActivity extends Activity {
         TextView target = text("ΣΩΣΤΗ ΑΠΑΝΤΗΣΗ", 11, MUTED, true);
         target.setGravity(Gravity.CENTER);
         root.addView(target, fullMargins(0, 20, 0, 4));
-        TextView answer = text(formatNumber(q.numericAnswer) + (q.unit.isEmpty() ? "" : " " + q.unit), 30, PURPLE, true);
+        TextView answer = text(formatNumber(q.numericAnswer) + (q.unit.isEmpty() ? "" : " " + q.unit), 30, RED, true);
         answer.setGravity(Gravity.CENTER);
         root.addView(answer, fullMargins(0, 0, 0, 14));
 
@@ -3590,7 +3606,7 @@ public class MainActivity extends Activity {
         root.addView(results, fullMargins(5, 0, 5, 14));
 
         if (tie) {
-            TextView tied = text("ΙΔΙΑ ΑΠΟΣΤΑΣΗ", 22, PURPLE, true);
+            TextView tied = text("ΙΔΙΑ ΑΠΟΣΤΑΣΗ", 22, RED, true);
             tied.setGravity(Gravity.CENTER);
             root.addView(tied, fullMargins(0, 0, 0, 6));
             Button again = primaryButton("ΣΥΝΕΧΕΙΑ  →",modeAccent(gameMode));
@@ -3670,7 +3686,7 @@ public class MainActivity extends Activity {
                 textPaint.setTextSize(dp(("multiple".equals(mode) || "ab".equals(mode) || "closest".equals(mode)) ? 8 : 10));
                 String[] lines = suddenModeWheelLabel(mode).split("\n");
                 for (int line = 0; line < lines.length; line++) {
-                    canvas.drawText(lines[line], tx, ty + (line - (lines.length - 1) / 2f) * dp(12), textPaint);
+                    QuizaraIcons.drawText(canvas, lines[line], tx, ty + (line - (lines.length - 1) / 2f) * dp(12), textPaint);
                 }
                 canvas.restore();
             }
@@ -4062,7 +4078,8 @@ public class MainActivity extends Activity {
         card.setElevation(dp(active?5:1));
         TextView title=text((active?"▶  ":"")+name,14,teamAccent(team),true);
         title.setSingleLine(true);applyAdaptiveText(title,10,14,true);card.addView(title);
-        card.addView(text(String.valueOf(score),30,TEXT,true));
+        TextView scoreText=text(String.valueOf(score),30,TEXT,true);scoreText.setGravity(Gravity.CENTER);
+        card.addView(scoreText,new LinearLayout.LayoutParams(-1,-2));
         TextView joker=text(isJokerAvailable(team)?"⚡ ΔΙΠΛ.":"ΔΙΠΛ. ✓",10,teamAccent(team),true);
         joker.setGravity(Gravity.CENTER);card.addView(joker);
         return card;
@@ -4464,7 +4481,7 @@ public class MainActivity extends Activity {
 
     private Button button(String value, int bgColor, int textColor) {
         Button b = new Button(this);
-        b.setText(value);
+        QuizaraIcons.setText(b, value);
         b.setTextColor(textColor);
         b.setTextSize(15);
         b.setTypeface(uiTypeface(true));
@@ -4513,7 +4530,7 @@ public class MainActivity extends Activity {
 
     private TextView text(String value, int sp, int color, boolean bold) {
         TextView t = new TextView(this);
-        t.setText(value);
+        QuizaraIcons.setText(t, value);
         t.setTextColor(color);
         t.setTextSize(sp);
         t.setTypeface(uiTypeface(bold));
