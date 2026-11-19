@@ -915,8 +915,12 @@ public class MainActivity extends Activity {
         settings.setOnClickListener(v -> { settingsSource = ScreenSource.HOME; showSettings(); });
         Button info = button("ⓘ  Πληροφορίες", BG, TEXT);
         info.setOnClickListener(v -> showInstructions());
+        Button suggest = button("＋  Πρότεινε", BG, TEXT);
+        suggest.setContentDescription("Πρότεινε ερώτηση");
+        suggest.setOnClickListener(v -> showSuggestQuestion());
         footer.addView(settings, new LinearLayout.LayoutParams(0, dp(48), 1));
         footer.addView(info, new LinearLayout.LayoutParams(0, dp(48), 1));
+        footer.addView(suggest, new LinearLayout.LayoutParams(0, dp(48), 1));
         root.addView(footer, fullMargins(0, 8, 0, 0));
         setScrollable(root);
     }
@@ -4263,6 +4267,146 @@ public class MainActivity extends Activity {
         card.addView(top);
         card.addView(input, fullMargins(0, 10, 0, 0));
         return card;
+    }
+
+    // ---------- SUGGEST A QUESTION ----------
+    // The draft lives here so it survives switching chips and a trip to the browser.
+    private int suggestCategory = -1;
+    private int suggestDifficulty = -1;
+    private String suggestQuestion = "";
+    private String suggestAnswer = "";
+    private String suggestSource = "";
+    private String suggestName = "";
+
+    private interface TextSink { void set(String value); }
+
+    private void showSuggestQuestion() {
+        LinearLayout root = baseColumn();
+        root.addView(simpleBackBar("Πρότεινε ερώτηση", this::showHome));
+        TextView intro = text("Γράψε μια ερώτηση για το Κλασικό. Με την «Αποστολή» ανοίγει μια φόρμα: πάτησε «Υποβολή» εκεί. Όσες εγκριθούν μπαίνουν σε επόμενη έκδοση.", 13, MUTED, false);
+        intro.setLineSpacing(dp(2), 1f);
+        root.addView(intro, fullMargins(4, 0, 4, 10));
+
+        root.addView(suggestLabel("Κατηγορία"));
+        GridLayout cats = new GridLayout(this);
+        cats.setColumnCount(3);
+        for (int i = 0; i < CATEGORIES.length; i++) {
+            final int index = i;
+            Button b = suggestChip(CATEGORIES[i].name, suggestCategory == i);
+            b.setOnClickListener(v -> { suggestCategory = index; showSuggestQuestion(); });
+            addThemeGridButton(cats, b);
+        }
+        root.addView(cats, fullMargins(1, 0, 1, 8));
+
+        root.addView(suggestLabel("Δυσκολία"));
+        LinearLayout diffs = new LinearLayout(this);
+        for (int i = 0; i < SuggestionForm.DIFFICULTIES.length; i++) {
+            final int index = i;
+            Button b = suggestChip(SuggestionForm.DIFFICULTIES[i], suggestDifficulty == i);
+            b.setOnClickListener(v -> { suggestDifficulty = index; showSuggestQuestion(); });
+            diffs.addView(b, weightedMargins(1, 3, 0, 3, 0));
+        }
+        root.addView(diffs, fullMargins(1, 0, 1, 10));
+
+        root.addView(suggestLabel("Ερώτηση"));
+        root.addView(suggestInput(suggestQuestion, "π.χ. Ποια είναι η πρωτεύουσα της Αυστραλίας;",
+                SuggestionForm.MAX_QUESTION, true, v -> suggestQuestion = v), fullMargins(3, 0, 3, 8));
+        root.addView(suggestLabel("Απάντηση"));
+        root.addView(suggestInput(suggestAnswer, "π.χ. Καμπέρα",
+                SuggestionForm.MAX_ANSWER, false, v -> suggestAnswer = v), fullMargins(3, 0, 3, 8));
+        root.addView(suggestLabel("Πηγή (προαιρετικά)"));
+        root.addView(suggestInput(suggestSource, "Πού το επιβεβαιώνουμε; π.χ. σύνδεσμος",
+                SuggestionForm.MAX_SOURCE, false, v -> suggestSource = v), fullMargins(3, 0, 3, 8));
+        root.addView(suggestLabel("Όνομα ή ψευδώνυμο (προαιρετικά)"));
+        root.addView(suggestInput(suggestName, "",
+                SuggestionForm.MAX_NAME, false, v -> suggestName = v), fullMargins(3, 0, 3, 12));
+
+        Button send = primaryButton("ΑΠΟΣΤΟΛΗ  →", ORANGE);
+        send.setOnClickListener(v -> sendSuggestion());
+        root.addView(send, fullMargins(2, 0, 2, 0));
+        setStaticScreen(root);
+    }
+
+    private TextView suggestLabel(String value) {
+        TextView t = text(value, 13, TEXT, true);
+        t.setPadding(dp(4), 0, dp(4), dp(4));
+        return t;
+    }
+
+    private Button suggestChip(String label, boolean selected) {
+        Button b = button((selected ? "✓ " : "") + label, selected ? ORANGE_SOFT : CARD, selected ? ORANGE : TEXT);
+        b.setTextSize(13);
+        b.setMinHeight(dp(42));
+        b.setBackground(round(selected ? ORANGE_SOFT : CARD, selected ? ORANGE : BORDER, selected ? 2 : 1, 10));
+        return b;
+    }
+
+    private EditText suggestInput(String value, String hint, int maxLength, boolean multiLine, TextSink sink) {
+        EditText input = teamInput(value);
+        input.setHint(hint);
+        input.setHintTextColor(MUTED);
+        input.setTextSize(15);
+        input.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(maxLength)});
+        int type = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES;
+        if (multiLine) {
+            input.setSingleLine(false);
+            input.setInputType(type | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+            input.setMinLines(2);
+            input.setMaxLines(4);
+            input.setGravity(Gravity.TOP | Gravity.START);
+        } else {
+            input.setInputType(type);
+        }
+        input.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
+            @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
+            @Override public void afterTextChanged(Editable s) { sink.set(s.toString()); }
+        });
+        return input;
+    }
+
+    private void sendSuggestion() {
+        String problem = null;
+        if (suggestCategory < 0) problem = "Διάλεξε κατηγορία";
+        else if (suggestDifficulty < 0) problem = "Διάλεξε δυσκολία";
+        else if (suggestQuestion.trim().length() < 10) problem = "Γράψε την ερώτηση";
+        else if (suggestAnswer.trim().isEmpty()) problem = "Γράψε την απάντηση";
+        if (problem != null) { Toast.makeText(this, problem, Toast.LENGTH_SHORT).show(); return; }
+
+        android.net.Uri uri = SuggestionForm.prefilledUri(CATEGORIES[suggestCategory].name,
+                SuggestionForm.DIFFICULTIES[suggestDifficulty], suggestQuestion, suggestAnswer, suggestSource, suggestName);
+        if (uri == null) {
+            Toast.makeText(this, "Οι προτάσεις δεν είναι ακόμη διαθέσιμες", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, uri));
+        } catch (android.content.ActivityNotFoundException e) {
+            Toast.makeText(this, "Δεν βρέθηκε πρόγραμμα περιήγησης", Toast.LENGTH_LONG).show();
+            return;
+        }
+        showSuggestionOpened();
+    }
+
+    private void showSuggestionOpened() {
+        LinearLayout root = baseColumn();
+        root.addView(simpleBackBar("Πρότεινε ερώτηση", this::showHome));
+        root.addView(instructionSection("Σχεδόν έτοιμο",
+                "Η φόρμα άνοιξε με την ερώτησή σου. Πάτησε «Υποβολή» εκεί για να σταλεί. Ευχαριστούμε!", ORANGE));
+        Button again = button("Άνοιγμα της φόρμας ξανά", CARD, TEXT);
+        again.setBackground(round(CARD, BORDER, 1, radius()));
+        again.setOnClickListener(v -> sendSuggestion());
+        root.addView(again, fullMargins(4, 0, 4, 10));
+        Button next = primaryButton("ΝΕΑ ΠΡΟΤΑΣΗ", ORANGE);
+        next.setOnClickListener(v -> {
+            suggestQuestion = ""; suggestAnswer = ""; suggestSource = "";
+            showSuggestQuestion();
+        });
+        root.addView(next, fullMargins(2, 0, 2, 10));
+        Button home = button("Αρχική", BG, TEXT);
+        home.setOnClickListener(v -> showHome());
+        root.addView(home, fullMargins(2, 0, 2, 0));
+        setStaticScreen(root);
     }
 
     private EditText teamInput(String value) {

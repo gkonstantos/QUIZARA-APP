@@ -1,15 +1,18 @@
 # -*- coding: utf-8 -*-
-"""Build the four question files from the reviewed question workbooks.
+r"""Build the four question files from the reviewed question workbooks.
 
 Usage (from the project root):
     python tools/import_question_workbooks.py --classic "OLES OI KLASIKES KATHGORIES.xlsm" \
-        --sudden "QUIZARA_Xafnikos_Thanatos_...xlsx" --specials "QUIZARA_SPECIAL_6_KATIGORIES_...xlsx"
+        --sudden "QUIZARA_Xafnikos_Thanatos_...xlsx" --specials "QUIZARA_SPECIAL_6_KATIGORIES_...xlsx" \
+        [--suggestions "Quizara προτάσεις (Responses).xlsx"]
 
 Each workbook is the complete set for its modes; it replaces what is in
 app/src/main/assets:
   --classic   6 category sheets      -> classic_questions.json and questions.json (Σπέσιαλ board)
   --sudden    5 Sudden Death sheets  -> sudden_death.json
   --specials  6 Special sheets       -> duel_specials.json
+  --suggestions (optional) the players' suggestions sheet downloaded from Google Sheets (.xlsx or
+              .csv); rows with "ναι" in the "Εγκρίθηκε" column are added to the classic questions.
 
 Rows the reviewers took out are skipped (the specials workbook's "ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ" list and
 TOP 5 rows "moved out of the pool"). Repeated questions are dropped: same text and answer, or nearly
@@ -39,6 +42,10 @@ CLASSIC_SHEETS = {'Γεωγραφία': 'geography', 'Ιστορία': 'history'
 SUDDEN_SHEETS = {'ΣΩΣΤΟ_ΛΑΘΟΣ': 'tf', 'ΠΟΛΛΑΠΛΗΣ': 'multiple', 'ΠΑΝΩ_ΚΑΤΩ': 'over_under',
                  'ΔΙΑΛΕΞΕ': 'ab', 'ΠΙΟ_ΚΟΝΤΑ': 'closest'}
 SPECIAL_TYPES = ('top5', 'find3', 'person_id', 'country_id', 'rank', 'connection')
+# Category names as players see them in the app (Τέχνες) and as the workbooks name them (Τέχνη).
+SUGGESTION_CATEGORIES = {'αθλητικα': 'sports', 'τεχνεσ': 'art', 'τεχνη': 'art', 'επιστημη': 'science',
+                         'ιστορια': 'history', 'γενικεσ': 'general', 'γεωγραφια': 'geography'}
+APPROVED = {'ναι', 'ν', 'yes', 'y', 'x', 'ok', 'οκ', '1', 'true', '✓', '✔'}
 DIFFICULTY = {'ευκολη': 1, 'ευκολο': 1, 'μεσαια': 2, 'μετρια': 2, 'δυσκολη': 3, 'δυσκολο': 3}
 CONNECTION_PROMPT = 'Τι συνδέει τα παρακάτω;\n\n'
 SAME_TEXT = 0.86          # at or above: lightly edited version of the same question
@@ -145,7 +152,25 @@ def unique_id(base, used):
 
 # ---------- classic ----------
 
-def build_classic(path):
+def suggestion_rows(path):
+    """Approved rows of the suggestions sheet (Google Forms responses), .xlsx or .csv."""
+    if path.lower().endswith('.csv'):
+        import csv
+        with open(path, encoding='utf-8-sig', newline='') as f:
+            rows = [dict(r, _row=n) for n, r in enumerate(csv.DictReader(f), start=2)]
+    else:
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
+        rows = sheet_rows(path, wb.sheetnames[0])
+    out = []
+    for r in rows:
+        r = {text(k): v for k, v in r.items()}
+        mark = text(r.get('Εγκρίθηκε'))
+        if mark.lower() in APPROVED or norm(mark) in APPROVED:
+            out.append(r)
+    return out
+
+
+def build_classic(path, suggestions=None):
     classic, used, dd = [], set(), Dedupe('classic')
     for sheet, cat in CLASSIC_SHEETS.items():
         for r in sheet_rows(path, sheet):
@@ -161,6 +186,22 @@ def build_classic(path):
             classic.append({'id': unique_id(base, used), 'category': cat,
                             'difficulty': difficulty(r.get('Δυσκολία'), where),
                             'question': q, 'answer': a, 'explanation': ''})
+    added = 0
+    for r in suggestion_rows(suggestions) if suggestions else []:
+        q, a = text(r.get('Ερώτηση')), text(r.get('Απάντηση'))
+        where = 'suggestion row %d' % r['_row']
+        cat = SUGGESTION_CATEGORIES.get(norm(r.get('Κατηγορία')))
+        if not q or not a or not cat:
+            warnings.append(where + ': needs a question, an answer and a known category, skipped')
+            continue
+        if not dd.add(q, norm(a), where + ': ' + q[:60]):
+            continue
+        classic.append({'id': unique_id('suggestion_%d' % r['_row'], used), 'category': cat,
+                        'difficulty': difficulty(r.get('Δυσκολία'), where),
+                        'question': q, 'answer': a, 'explanation': ''})
+        added += 1
+    if suggestions:
+        print('approved suggestions added: %d' % added)
     duel = [{'category': c['category'], 'multiplier': c['difficulty'], 'question': c['question'],
              'answers': [c['answer']], 'correctIndex': 0, 'explanation': ''} for c in classic]
     return classic, duel, dd.dropped
@@ -337,9 +378,10 @@ def main():
     ap.add_argument('--classic', required=True)
     ap.add_argument('--sudden', required=True)
     ap.add_argument('--specials', required=True)
+    ap.add_argument('--suggestions')
     args = ap.parse_args()
 
-    classic, duel, classic_dropped = build_classic(args.classic)
+    classic, duel, classic_dropped = build_classic(args.classic, args.suggestions)
     sudden = build_sudden(args.sudden)
     specials, skipped = build_specials(args.specials)
     problems = check(classic, duel, sudden, specials)

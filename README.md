@@ -127,12 +127,29 @@ Repeated questions are dropped (same text and answer, or nearly the same text wi
 answer). The script prints what it dropped and stops with an error if a mode would be left without
 the questions it needs.
 
+### Questions suggested by players
+
+**＋ Πρότεινε** on the home screen lets players write a classic question. The app opens a Google
+Form with their text already filled in, and they submit it there; the app itself sends nothing and
+has no internet permission. The form's answers collect in a Google Sheet. To approve a suggestion,
+write `ναι` in its *Εγκρίθηκε* column (fix the wording there if needed), download the sheet as
+.xlsx and add it when regenerating:
+
+```bash
+python tools/import_question_workbooks.py ... --suggestions "Quizara προτάσεις.xlsx"
+```
+
+Approved rows join the classic questions; ones that repeat an existing question are dropped. The
+form's address and field numbers are set in `SuggestionForm.java` (see the comment there); with
+none set, the screen shows that suggestions are not available yet.
+
 ## Project layout
 
 ```
 app/src/main/java/.../MainActivity.java   the game (plain Java, no libraries)
 app/src/main/java/.../CheeseGame.java     4 Τυριά rules, independent of Android
 app/src/main/java/.../QuizaraIcons.java   drawn icons for the Special and Sudden Death modes
+app/src/main/java/.../SuggestionForm.java  Google Form link for suggested questions
 app/src/main/assets/                       question banks (JSON)
 app/src/main/res/                          posters, logos, sounds, launcher icons, theme
 tools/import_question_workbooks.py         Excel workbooks → question JSON
@@ -141,6 +158,9 @@ build-preview.sh                           Gradle-free build script
 ```
 
 ## Version
+
+**0.12.9** (version code 50): players can suggest questions (**＋ Πρότεινε** on the home screen),
+sent through a Google Form; approved suggestions are added with `--suggestions`.
 
 **0.12.8** (version code 49): question banks rebuilt from the reviewed workbooks: 5,933 classic
 questions (from 3,449), 2,994 Specials (from 720) and 1,116 Sudden Death questions (from 250), with
