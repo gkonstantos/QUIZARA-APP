@@ -59,6 +59,8 @@ jobs:
           if [ -z "$KEYSTORE" ]; then
             echo "::error::Add the PREVIEW_KEYSTORE_B64 secret, or the APK will not update installed copies"; exit 1
           fi
+          # development/ holds only the keystore, which git ignores, so the checkout has no such folder.
+          mkdir -p development
           echo "$KEYSTORE" | base64 -d > development/preview.keystore
 
       - name: Raise the version
