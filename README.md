@@ -41,10 +41,10 @@ the questions aloud. It works fully offline: no account, no ads, no permissions.
 ### Questions included
 | Set | Questions |
 |---|---|
-| Classic / 4 Τυριά | 3,449 |
-| Σπέσιαλ board | 3,449 |
-| Σπέσιαλ Specials | 720 |
-| Sudden Death | 250 |
+| Classic / 4 Τυριά | 5,933 |
+| Σπέσιαλ board | 5,933 |
+| Σπέσιαλ Specials | 2,994 |
+| Sudden Death | 1,116 |
 
 ### Also
 - **Διπλασιασμός (×2)**: in Σπέσιαλ each team can double the value of one question per game.
@@ -106,20 +106,26 @@ builds use the standard Android debug key. Neither key may be used for a Play St
 
 ## Editing the questions
 
-The four files in `app/src/main/assets/` are generated from Excel sheets. To change the questions,
-edit the sheets and regenerate:
+The four files in `app/src/main/assets/` are generated from three reviewed Excel workbooks. Each
+workbook is the complete set for its modes, so regenerating replaces the questions in the app:
 
 ```bash
 pip install openpyxl
-python tools/excel_to_json.py "path/to/the/excel/folder"
+python tools/import_question_workbooks.py   --classic  "OLES OI KLASIKES KATHGORIES.xlsm"   --sudden   "QUIZARA_Xafnikos_Thanatos_Extra_Skalotika_Mandela.xlsx"   --specials "QUIZARA_SPECIAL_6_KATIGORIES_POP_GOSSIP_EMPLOUTISMENO.xlsx"
 ```
 
-Then rebuild. Each file's role comes from its name: `SPORTS`, `ARTS`, `SCIENCE`, `HISTORY`,
-`GENERAL`, `GEOGRAPHY` for the categories; `TOP5`, `FIND3`, `PERSON_ID`, `COUNTRY_ID`, `RANK`,
-`CONNECTION` for the Specials; and `TF_`, `MC_`, `OU_`, `AB_`, `CLOSEST_sudden_death` for Sudden
-Death. A `CONNECTION` sheet has the columns *Κλειδί, Στοιχεία, Σύνδεση, Επεξήγηση*; without one,
-the connection questions already in the app are kept. The script stops with an error if a mode
-would be left without the questions it needs.
+Then rebuild. The workbooks need these sheets:
+
+- **Classic** (also fills the Σπέσιαλ board): *Γεωγραφία, Ιστορία, Τέχνη, Αθλητικά, Γενικές,
+  Επιστήμη* with the columns *ID* (or *Κλειδί*), *Ερώτηση, Απάντηση, Δυσκολία*.
+- **Sudden Death**: *ΣΩΣΤΟ_ΛΑΘΟΣ, ΠΟΛΛΑΠΛΗΣ, ΠΑΝΩ_ΚΑΤΩ, ΔΙΑΛΕΞΕ, ΠΙΟ_ΚΟΝΤΑ* with *ID, Ερώτηση,
+  Επιλογή Α–Δ, Σωστή απάντηση, Αριθμητική απάντηση, Μονάδα, Αιτιολόγηση*.
+- **Specials**: *Top 5, Βρες 3, Βάλτα σε σειρά, Βρες τη σύνδεση, Person ID, Country ID*. Rows listed in
+  *ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ* and TOP 5 rows marked "Μετακινήθηκε στο τέλος" are left out of the game.
+
+Repeated questions are dropped (same text and answer, or nearly the same text with the same
+answer). The script prints what it dropped and stops with an error if a mode would be left without
+the questions it needs.
 
 ## Project layout
 
@@ -129,12 +135,16 @@ app/src/main/java/.../CheeseGame.java     4 Τυριά rules, independent of And
 app/src/main/java/.../QuizaraIcons.java   drawn icons for the Special and Sudden Death modes
 app/src/main/assets/                       question banks (JSON)
 app/src/main/res/                          posters, logos, sounds, launcher icons, theme
-tools/excel_to_json.py                     Excel → JSON converter
+tools/import_question_workbooks.py         Excel workbooks → question JSON
 build-preview.sh                           Gradle-free build script
 .github/workflows/build-apk.yml            CI build that produces the APK
 ```
 
 ## Version
+
+**0.12.8** (version code 49): question banks rebuilt from the reviewed workbooks: 5,933 classic
+questions (from 3,449), 2,994 Specials (from 720) and 1,116 Sudden Death questions (from 250), with
+corrected questions replacing the old ones and repeats removed.
 
 **0.12.7** (version code 48): launcher icon redrawn from the new home poster (circles instead of
 triangles); the round icon is now actually round, and the drawn-in grey frame is gone.
