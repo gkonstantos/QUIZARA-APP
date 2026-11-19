@@ -146,6 +146,28 @@ repeat an existing question, or miss a field their kind needs, are dropped. The
 form's address and field numbers are set in `SuggestionForm.java` (see the comment there); with
 none set, the screen shows that suggestions are not available yet.
 
+#### Daily import
+
+A GitHub Actions job (`.github/workflows/import-suggestions.yml`) does this every day at 03:00 UTC,
+so approving a row in the sheet is enough. It downloads the sheet and runs the importer with
+`--update`, which keeps the questions already in the app and replaces only the suggested ones
+(ids `suggestion_N`, N = the sheet row) with the approved rows. So an edited row is updated and a
+row whose `ναι` is removed goes away again. If anything changed, the job raises the version
+(0.13.0 → 0.13.1), builds the APK, commits to `main` and publishes the APK as a GitHub release.
+Days with nothing new produce nothing. It can also be started by hand from the Actions tab
+(*Import approved suggestions* → *Run workflow*).
+
+Setup, once (repository *Settings → Secrets and variables → Actions → New repository secret*):
+
+- `SUGGESTIONS_SHEET_ID`: the part of the response sheet's address between `/d/` and `/edit`. Share
+  the sheet as *anyone with the link can view*.
+- `PREVIEW_KEYSTORE_B64`: `development/preview.keystore` in base64, so the APK installs over
+  existing copies. In PowerShell, from the project folder:
+  `[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\development\preview.keystore")) | Set-Clipboard`
+
+Don't sort or delete rows in the response sheet: the row number is the question's id. Pull before
+working locally, since the job commits version bumps to `main`.
+
 ## Project layout
 
 ```
@@ -157,7 +179,9 @@ app/src/main/assets/                       question banks (JSON)
 app/src/main/res/                          posters, logos, sounds, launcher icons, theme
 tools/import_question_workbooks.py         Excel workbooks → question JSON
 build-preview.sh                           Gradle-free build script
+tools/bump_version.py                      raises versionCode/versionName (used by the daily job)
 .github/workflows/build-apk.yml            CI build that produces the APK
+.github/workflows/import-suggestions.yml   daily import of approved suggestions + release
 ```
 
 ## Version

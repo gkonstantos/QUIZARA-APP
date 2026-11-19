@@ -5,6 +5,7 @@ Usage (from the project root):
     python tools/import_question_workbooks.py --classic "OLES OI KLASIKES KATHGORIES.xlsm" \
         --sudden "QUIZARA_Xafnikos_Thanatos_...xlsx" --specials "QUIZARA_SPECIAL_6_KATIGORIES_...xlsx" \
         [--suggestions "Quizara προτάσεις (Responses).xlsx"]
+    python tools/import_question_workbooks.py --update --suggestions "Quizara προτάσεις (Responses).xlsx"
 
 Each workbook is the complete set for its modes; it replaces what is in
 app/src/main/assets:
@@ -12,7 +13,11 @@ app/src/main/assets:
   --sudden    5 Sudden Death sheets  -> sudden_death.json
   --specials  6 Special sheets       -> duel_specials.json
   --suggestions (optional) the players' suggestions sheet downloaded from Google Sheets (.xlsx or
-              .csv); rows with "ναι" in the "Εγκρίθηκε" column are added to the classic questions.
+              .csv); rows with "ναι" in the "Εγκρίθηκε" column are added to the classic questions
+              or, for the other kinds, to the Specials.
+  --update    no workbooks needed: keep the questions already in the assets and only replace the
+              suggested ones (ids "suggestion_N", N = sheet row) with the sheet's approved rows.
+              The daily GitHub job (.github/workflows/import-suggestions.yml) runs this.
 
 Rows the reviewers took out are skipped (the specials workbook's "ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ" list and
 TOP 5 rows "moved out of the pool"). Repeated questions are dropped: same text and answer, or nearly
@@ -164,6 +169,8 @@ def suggestion_rows(path):
     else:
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
         rows = sheet_rows(path, wb.sheetnames[0])
+    if rows and not any(text(k) == 'Εγκρίθηκε' for k in rows[0]):
+        sys.exit('ERROR: %s has no "Εγκρίθηκε" column; is it the form\'s responses sheet?' % path)
     out = []
     for r in rows:
         r = {text(k): v for k, v in r.items()}
@@ -252,6 +259,17 @@ def build_classic(path, suggestions=None):
             classic.append({'id': unique_id(base, used), 'category': cat,
                             'difficulty': difficulty(r.get('Δυσκολία'), where),
                             'question': q, 'answer': a, 'explanation': ''})
+    add_classic_suggestions(classic, used, dd, suggestions)
+    return classic, duel_of(classic), dd.dropped
+
+
+def duel_of(classic):
+    """The Σπέσιαλ board's questions.json, made from the classic questions."""
+    return [{'category': c['category'], 'multiplier': c['difficulty'], 'question': c['question'],
+             'answers': [c['answer']], 'correctIndex': 0, 'explanation': ''} for c in classic]
+
+
+def add_classic_suggestions(classic, used, dd, suggestions):
     added = 0
     for r in suggestions or []:
         if r['_type'] != 'classic':
@@ -270,9 +288,6 @@ def build_classic(path, suggestions=None):
         added += 1
     if suggestions:
         print('approved suggestions added: %d' % added)
-    duel = [{'category': c['category'], 'multiplier': c['difficulty'], 'question': c['question'],
-             'answers': [c['answer']], 'correctIndex': 0, 'explanation': ''} for c in classic]
-    return classic, duel, dd.dropped
 
 
 # ---------- sudden death ----------
@@ -443,18 +458,48 @@ def check(classic, duel, sudden, specials):
     return problems
 
 
+def update_existing(suggestions):
+    """--update: keep the app's questions from the workbooks and replace only the suggested ones
+    with the sheet's approved rows (so edited rows change and rows no longer approved go away)."""
+    def load(name):
+        with open(os.path.join(ASSETS, name), encoding='utf-8') as f:
+            return json.load(f)
+
+    def from_workbooks(q):
+        return not q['id'].startswith('suggestion_')
+
+    classic = [q for q in load('classic_questions.json') if from_workbooks(q)]
+    dd = Dedupe('classic')
+    for q in classic:
+        dd.add(q['question'], norm(q['answer']), q['id'])
+    add_classic_suggestions(classic, {q['id'] for q in classic}, dd, suggestions)
+    specials = [q for q in load('duel_specials.json') if from_workbooks(q)]
+    add_special_suggestions(specials, {q['id'] for q in specials}, suggestions)
+    return classic, duel_of(classic), dd.dropped, load('sudden_death.json'), specials
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('--classic', required=True)
-    ap.add_argument('--sudden', required=True)
-    ap.add_argument('--specials', required=True)
+    ap.add_argument('--classic')
+    ap.add_argument('--sudden')
+    ap.add_argument('--specials')
     ap.add_argument('--suggestions')
+    ap.add_argument('--update', action='store_true',
+                    help='only refresh the suggested questions in the existing files (needs --suggestions)')
     args = ap.parse_args()
+    if args.update and not args.suggestions:
+        ap.error('--update needs --suggestions')
+    if not args.update and not (args.classic and args.sudden and args.specials):
+        ap.error('--classic, --sudden and --specials are required (or use --update --suggestions)')
 
     suggestions = suggestion_rows(args.suggestions) if args.suggestions else None
-    classic, duel, classic_dropped = build_classic(args.classic, suggestions)
-    sudden = build_sudden(args.sudden)
-    specials, skipped = build_specials(args.specials, suggestions)
+    if args.update:
+        classic, duel, classic_dropped, sudden, specials = update_existing(suggestions)
+        skipped = {}
+    else:
+        classic, duel, classic_dropped = build_classic(args.classic, suggestions)
+        sudden = build_sudden(args.sudden)
+        specials, skipped = build_specials(args.specials, suggestions)
     problems = check(classic, duel, sudden, specials)
     if problems:
         sys.exit('ERROR:\n  ' + '\n  '.join(problems))

@@ -1,0 +1,101 @@
+name: Import approved suggestions
+
+# Once a day: read the players' suggestions sheet, put the rows marked "ναι" in Εγκρίθηκε into the
+# question files, and if anything changed, raise the version, build the APK, commit and publish it
+# as a GitHub release. Needs two repository secrets (see README, "Daily import"):
+#   SUGGESTIONS_SHEET_ID   the id in the sheet's address (.../spreadsheets/d/<id>/edit); the sheet
+#                          must be shared as "anyone with the link can view"
+#   PREVIEW_KEYSTORE_B64   development/preview.keystore in base64, so the APK updates installed copies
+on:
+  schedule:
+    - cron: '0 3 * * *'      # 03:00 UTC, 05:00/06:00 in Greece
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: import-suggestions
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Download the suggestions sheet
+        env:
+          SHEET_ID: ${{ secrets.SUGGESTIONS_SHEET_ID }}
+        run: |
+          if [ -z "$SHEET_ID" ]; then echo "::error::Add the SUGGESTIONS_SHEET_ID secret"; exit 1; fi
+          curl -fsSL -o "$RUNNER_TEMP/suggestions.xlsx" \
+            "https://docs.google.com/spreadsheets/d/$SHEET_ID/export?format=xlsx"
+
+      - name: Add approved suggestions to the question files
+        run: |
+          pip install --quiet openpyxl==3.1.5
+          python tools/import_question_workbooks.py --update --suggestions "$RUNNER_TEMP/suggestions.xlsx"
+
+      - name: Anything new?
+        id: diff
+        run: |
+          if git diff --quiet -- app/src/main/assets; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No new or changed approved suggestions."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            git diff --stat -- app/src/main/assets
+          fi
+
+      - name: Signing key
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          KEYSTORE: ${{ secrets.PREVIEW_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$KEYSTORE" ]; then
+            echo "::error::Add the PREVIEW_KEYSTORE_B64 secret, or the APK will not update installed copies"; exit 1
+          fi
+          echo "$KEYSTORE" | base64 -d > development/preview.keystore
+
+      - name: Raise the version
+        if: steps.diff.outputs.changed == 'true'
+        id: version
+        run: echo "name=$(python tools/bump_version.py)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v5
+        if: steps.diff.outputs.changed == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.diff.outputs.changed == 'true'
+
+      - name: Build the APK
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          ./gradlew :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/quizara-${{ steps.version.outputs.name }}.apk"
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets app/build.gradle.kts
+          git commit -m "${{ steps.version.outputs.name }}: approved player suggestions"
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
+      - name: Publish the APK
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.version.outputs.name }}"
+          gh release create "v$v" "$RUNNER_TEMP/quizara-$v.apk" --target "$(git rev-parse HEAD)" \
+            --title "Quizara $v" --notes "Approved player suggestions added. Install quizara-$v.apk over the previous version."
