@@ -45,6 +45,9 @@ SPECIAL_TYPES = ('top5', 'find3', 'person_id', 'country_id', 'rank', 'connection
 # Category names as players see them in the app (Τέχνες) and as the workbooks name them (Τέχνη).
 SUGGESTION_CATEGORIES = {'αθλητικα': 'sports', 'τεχνεσ': 'art', 'τεχνη': 'art', 'επιστημη': 'science',
                          'ιστορια': 'history', 'γενικεσ': 'general', 'γεωγραφια': 'geography'}
+# Question types as the form names them ("Είδος ερώτησης"); rows without a type are classic.
+SUGGESTION_TYPES = {'κλασικη': 'classic', 'top 5': 'top5', 'βρεσ 3': 'find3', 'βαλ τα σε σειρα': 'rank',
+                    'βρεσ τη συνδεση': 'connection', 'person id': 'person_id', 'country id': 'country_id'}
 APPROVED = {'ναι', 'ν', 'yes', 'y', 'x', 'ok', 'οκ', '1', 'true', '✓', '✔'}
 DIFFICULTY = {'ευκολη': 1, 'ευκολο': 1, 'μεσαια': 2, 'μετρια': 2, 'δυσκολη': 3, 'δυσκολο': 3}
 CONNECTION_PROMPT = 'Τι συνδέει τα παρακάτω;\n\n'
@@ -166,8 +169,71 @@ def suggestion_rows(path):
         r = {text(k): v for k, v in r.items()}
         mark = text(r.get('Εγκρίθηκε'))
         if mark.lower() in APPROVED or norm(mark) in APPROVED:
+            r['_type'] = SUGGESTION_TYPES.get(norm(r.get('Είδος ερώτησης')), 'classic')
+            r['_lines'] = [x.strip() for k, v in r.items() if text(k).startswith('Απαντήσεις')
+                           for x in text(v).split('\n') if x.strip()]
             out.append(r)
     return out
+
+
+def add_special_suggestions(out, used, suggestions):
+    """Add approved special-question suggestions, dropping ones that repeat a special already in the file."""
+    def key(kind, prompt, items, answer):
+        if kind in ('top5', 'find3'):
+            return prompt, tuple(sorted(map(norm, items)))
+        if kind == 'rank':
+            return prompt + ' ' + ' '.join(items), tuple(map(norm, items))
+        if kind == 'connection':
+            return ' '.join(items), tuple(sorted(map(norm, items)))
+        return ' '.join(items), (norm(answer),) + tuple(map(norm, items))
+
+    dd = collections.defaultdict(lambda: None)
+    for q in out:
+        kind = q['type']
+        if dd[kind] is None:
+            dd[kind] = Dedupe(kind)
+        if kind == 'connection':
+            items = q['prompt'].split('\n\n', 1)[-1].split(' · ')
+        elif kind in ('person_id', 'country_id'):
+            items = q['hints']
+        else:
+            items = q.get('correctOrder') or q.get('answers') or []
+        dd[kind].add(*key(kind, q['prompt'], items, (q.get('answers') or [''])[0]), description=q['id'])
+
+    added = 0
+    for r in suggestions:
+        kind = r['_type']
+        if kind == 'classic':
+            continue
+        where = 'suggestion row %d' % r['_row']
+        prompt, answer, lines = text(r.get('Ερώτηση')), text(r.get('Απάντηση')), r['_lines']
+        need = {'top5': len(lines) == 5 and prompt, 'find3': len(lines) >= 3 and prompt,
+                'rank': 4 <= len(lines) <= 5 and prompt, 'connection': 3 <= len(lines) <= 5 and answer,
+                'person_id': len(lines) == 3 and answer, 'country_id': len(lines) == 3 and answer}
+        if not need.get(kind):
+            warnings.append(where + ': %s suggestion is missing its question, answer or lines, skipped' % kind)
+            continue
+        if dd[kind] is None:
+            dd[kind] = Dedupe(kind)
+        if not dd[kind].add(*key(kind, prompt, lines, answer), description=where):
+            continue
+        uid = unique_id('suggestion_%d' % r['_row'], used)
+        title = {'top5': 'TOP 5', 'find3': 'ΒΡΕΣ 3', 'rank': 'ΒΑΛ’ ΤΑ ΣΕ ΣΕΙΡΑ', 'connection': 'ΒΡΕΣ ΤΗ ΣΥΝΔΕΣΗ',
+                 'person_id': 'PERSON ID', 'country_id': 'COUNTRY ID'}[kind]
+        entry = {'id': uid, 'type': kind, 'title': title, 'prompt': prompt, 'explanation': ''}
+        if kind in ('top5', 'find3'):
+            entry['answers'] = lines
+        elif kind == 'rank':
+            entry['items'], entry['correctOrder'] = list(lines), list(lines)
+        elif kind == 'connection':
+            entry['prompt'] = CONNECTION_PROMPT + ' · '.join(lines)
+            entry['answers'] = [answer]
+        else:
+            entry['prompt'] = 'Ποιο πρόσωπο ψάχνουμε;' if kind == 'person_id' else 'Ποια χώρα ψάχνουμε;'
+            entry['hints'], entry['answers'] = lines, [answer]
+        out.append(entry)
+        added += 1
+    print('approved special suggestions added: %d' % added)
 
 
 def build_classic(path, suggestions=None):
@@ -187,7 +253,9 @@ def build_classic(path, suggestions=None):
                             'difficulty': difficulty(r.get('Δυσκολία'), where),
                             'question': q, 'answer': a, 'explanation': ''})
     added = 0
-    for r in suggestion_rows(suggestions) if suggestions else []:
+    for r in suggestions or []:
+        if r['_type'] != 'classic':
+            continue
         q, a = text(r.get('Ερώτηση')), text(r.get('Απάντηση'))
         where = 'suggestion row %d' % r['_row']
         cat = SUGGESTION_CATEGORIES.get(norm(r.get('Κατηγορία')))
@@ -260,7 +328,7 @@ def build_sudden(path):
 
 # ---------- specials ----------
 
-def build_specials(path):
+def build_specials(path, suggestions=None):
     excluded = collections.defaultdict(set)
     for r in sheet_rows(path, 'ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ'):
         excluded[text(r.get('Κατηγορία'))].add(text(r.get('ID')))
@@ -346,6 +414,8 @@ def build_specials(path):
             seen.add(key)
             out.append({'id': unique_id('%s_%s' % (kind, rid), used), 'type': kind, 'title': title,
                         'prompt': prompt, 'hints': hints, 'answers': [answer], 'explanation': ''})
+    if suggestions:
+        add_special_suggestions(out, used, suggestions)
     return out, skipped
 
 
@@ -381,9 +451,10 @@ def main():
     ap.add_argument('--suggestions')
     args = ap.parse_args()
 
-    classic, duel, classic_dropped = build_classic(args.classic, args.suggestions)
+    suggestions = suggestion_rows(args.suggestions) if args.suggestions else None
+    classic, duel, classic_dropped = build_classic(args.classic, suggestions)
     sudden = build_sudden(args.sudden)
-    specials, skipped = build_specials(args.specials)
+    specials, skipped = build_specials(args.specials, suggestions)
     problems = check(classic, duel, sudden, specials)
     if problems:
         sys.exit('ERROR:\n  ' + '\n  '.join(problems))

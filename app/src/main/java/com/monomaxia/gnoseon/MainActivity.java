@@ -4271,60 +4271,139 @@ public class MainActivity extends Activity {
 
     // ---------- SUGGEST A QUESTION ----------
     // The draft lives here so it survives switching chips and a trip to the browser.
+    private int suggestType = SuggestionForm.CLASSIC;
     private int suggestCategory = -1;
     private int suggestDifficulty = -1;
     private String suggestQuestion = "";
     private String suggestAnswer = "";
+    private String suggestLines = "";
+    private final String[] suggestClues = {"", "", ""};
     private String suggestSource = "";
     private String suggestName = "";
+    private ScrollView suggestScroll;
 
     private interface TextSink { void set(String value); }
 
-    private void showSuggestQuestion() {
+    private void showSuggestQuestion() { showSuggestQuestion(false); }
+
+    // Title and type buttons stay put; only the fields below them scroll and change with the type.
+    private void showSuggestQuestion(boolean keepScroll) {
+        final int type = suggestType;
+        final int scrollY = keepScroll && suggestScroll != null ? suggestScroll.getScrollY() : 0;
         LinearLayout root = baseColumn();
+        root.setTag("winner_full_height");
         root.addView(simpleBackBar("Πρότεινε ερώτηση", this::showHome));
-        TextView intro = text("Γράψε μια ερώτηση για το Κλασικό. Με την «Αποστολή» ανοίγει μια φόρμα: πάτησε «Υποβολή» εκεί. Όσες εγκριθούν μπαίνουν σε επόμενη έκδοση.", 13, MUTED, false);
+        TextView intro = text("Με την «Αποστολή» ανοίγει μια φόρμα: πάτησε «Υποβολή» εκεί. Όσες εγκριθούν μπαίνουν σε επόμενη έκδοση.", 13, MUTED, false);
         intro.setLineSpacing(dp(2), 1f);
-        root.addView(intro, fullMargins(4, 0, 4, 10));
+        root.addView(intro, fullMargins(4, 0, 4, 8));
 
-        root.addView(suggestLabel("Κατηγορία"));
-        GridLayout cats = new GridLayout(this);
-        cats.setColumnCount(3);
-        for (int i = 0; i < CATEGORIES.length; i++) {
+        root.addView(suggestLabel("Είδος"));
+        GridLayout types = new GridLayout(this);
+        types.setColumnCount(4);
+        for (int i = 0; i < SuggestionForm.TYPE_LABELS.length; i++) {
             final int index = i;
-            Button b = suggestChip(CATEGORIES[i].name, suggestCategory == i);
-            b.setOnClickListener(v -> { suggestCategory = index; showSuggestQuestion(); });
-            addThemeGridButton(cats, b);
+            Button b = suggestChip(SuggestionForm.TYPE_LABELS[i], type == i);
+            b.setTextSize(12);
+            b.setOnClickListener(v -> { suggestType = index; showSuggestQuestion(true); });
+            addThemeGridButton(types, b);
         }
-        root.addView(cats, fullMargins(1, 0, 1, 8));
+        root.addView(types, fullMargins(1, 0, 1, 8));
+        LinearLayout fields = new LinearLayout(this);
+        fields.setOrientation(LinearLayout.VERTICAL);
 
-        root.addView(suggestLabel("Δυσκολία"));
+        if (type == SuggestionForm.CLASSIC) {
+            fields.addView(suggestLabel("Κατηγορία"));
+            GridLayout cats = new GridLayout(this);
+            cats.setColumnCount(3);
+            for (int i = 0; i < CATEGORIES.length; i++) {
+                final int index = i;
+                Button b = suggestChip(CATEGORIES[i].name, suggestCategory == i);
+                b.setOnClickListener(v -> { suggestCategory = index; showSuggestQuestion(true); });
+                addThemeGridButton(cats, b);
+            }
+            fields.addView(cats, fullMargins(1, 0, 1, 8));
+        }
+
+        fields.addView(suggestLabel("Δυσκολία"));
         LinearLayout diffs = new LinearLayout(this);
         for (int i = 0; i < SuggestionForm.DIFFICULTIES.length; i++) {
             final int index = i;
             Button b = suggestChip(SuggestionForm.DIFFICULTIES[i], suggestDifficulty == i);
-            b.setOnClickListener(v -> { suggestDifficulty = index; showSuggestQuestion(); });
+            b.setOnClickListener(v -> { suggestDifficulty = index; showSuggestQuestion(true); });
             diffs.addView(b, weightedMargins(1, 3, 0, 3, 0));
         }
-        root.addView(diffs, fullMargins(1, 0, 1, 10));
+        fields.addView(diffs, fullMargins(1, 0, 1, 10));
 
-        root.addView(suggestLabel("Ερώτηση"));
-        root.addView(suggestInput(suggestQuestion, "π.χ. Ποια είναι η πρωτεύουσα της Αυστραλίας;",
-                SuggestionForm.MAX_QUESTION, true, v -> suggestQuestion = v), fullMargins(3, 0, 3, 8));
-        root.addView(suggestLabel("Απάντηση"));
-        root.addView(suggestInput(suggestAnswer, "π.χ. Καμπέρα",
-                SuggestionForm.MAX_ANSWER, false, v -> suggestAnswer = v), fullMargins(3, 0, 3, 8));
-        root.addView(suggestLabel("Πηγή (προαιρετικά)"));
-        root.addView(suggestInput(suggestSource, "Πού το επιβεβαιώνουμε; π.χ. σύνδεσμος",
+        switch (type) {
+            case SuggestionForm.CLASSIC:
+                addSuggestQuestion(fields, "π.χ. Ποια είναι η πρωτεύουσα της Αυστραλίας;");
+                addSuggestAnswer(fields, "Απάντηση", "π.χ. Καμπέρα");
+                break;
+            case SuggestionForm.TOP5:
+                addSuggestQuestion(fields, "π.χ. Ποιες είναι οι 5 μεγαλύτερες χώρες σε έκταση;");
+                addSuggestLines(fields, "Οι 5 απαντήσεις (μία ανά γραμμή)", "Ρωσία\nΚαναδάς\nΚίνα\nΗΠΑ\nΒραζιλία");
+                break;
+            case SuggestionForm.FIND3:
+                addSuggestQuestion(fields, "π.χ. Βρες 3 χώρες που συνορεύουν με την Ελλάδα.");
+                addSuggestLines(fields, "Όλες οι σωστές απαντήσεις (μία ανά γραμμή)", "Αλβανία\nΒόρεια Μακεδονία\nΒουλγαρία\nΤουρκία");
+                break;
+            case SuggestionForm.RANK:
+                addSuggestQuestion(fields, "π.χ. Βάλ' τα από το παλαιότερο στο νεότερο.");
+                addSuggestLines(fields, "4–5 στοιχεία με τη σωστή σειρά (μία ανά γραμμή)", "Γαλλική Επανάσταση (1789)\nΕλληνική Επανάσταση (1821)\nΡωσική Επανάσταση (1917)\nΠτώση του Τείχους (1989)");
+                break;
+            case SuggestionForm.CONNECTION:
+                addSuggestLines(fields, "3–5 στοιχεία (μία ανά γραμμή)", "Ερμής\nΑφροδίτη\nΓη\nΆρης");
+                addSuggestAnswer(fields, "Τι τα συνδέει;", "π.χ. Οι βραχώδεις πλανήτες");
+                break;
+            default: // Person ID / Country ID
+                addSuggestAnswer(fields, type == SuggestionForm.PERSON ? "Ποιο πρόσωπο;" : "Ποια χώρα;",
+                        type == SuggestionForm.PERSON ? "π.χ. Μαρία Κάλλας" : "π.χ. Ιαπωνία");
+                String[] levels = {"Στοιχείο 1 (δύσκολο)", "Στοιχείο 2 (μεσαίο)", "Στοιχείο 3 (εύκολο)"};
+                for (int i = 0; i < 3; i++) {
+                    final int index = i;
+                    fields.addView(suggestLabel(levels[i]));
+                    fields.addView(suggestInput(suggestClues[i], "", SuggestionForm.MAX_ANSWER * 2, false,
+                            v -> suggestClues[index] = v), fullMargins(3, 0, 3, 8));
+                }
+                break;
+        }
+        fields.addView(suggestLabel("Πηγή (προαιρετικά)"));
+        fields.addView(suggestInput(suggestSource, "Πού το επιβεβαιώνουμε; π.χ. σύνδεσμος",
                 SuggestionForm.MAX_SOURCE, false, v -> suggestSource = v), fullMargins(3, 0, 3, 8));
-        root.addView(suggestLabel("Όνομα ή ψευδώνυμο (προαιρετικά)"));
-        root.addView(suggestInput(suggestName, "",
+        fields.addView(suggestLabel("Όνομα ή ψευδώνυμο (προαιρετικά)"));
+        fields.addView(suggestInput(suggestName, "",
                 SuggestionForm.MAX_NAME, false, v -> suggestName = v), fullMargins(3, 0, 3, 12));
 
         Button send = primaryButton("ΑΠΟΣΤΟΛΗ  →", ORANGE);
         send.setOnClickListener(v -> sendSuggestion());
-        root.addView(send, fullMargins(2, 0, 2, 0));
+        fields.addView(send, fullMargins(2, 0, 2, 0));
+        final ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.addView(fields);
+        root.addView(scroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+        suggestScroll = scroll;
+        if (scrollY > 0) scroll.post(() -> scroll.scrollTo(0, scrollY));
         setStaticScreen(root);
+    }
+
+    private void addSuggestQuestion(LinearLayout root, String hint) {
+        root.addView(suggestLabel("Ερώτηση"));
+        root.addView(suggestInput(suggestQuestion, hint, SuggestionForm.MAX_QUESTION, true,
+                v -> suggestQuestion = v), fullMargins(3, 0, 3, 8));
+    }
+
+    private void addSuggestAnswer(LinearLayout root, String label, String hint) {
+        root.addView(suggestLabel(label));
+        root.addView(suggestInput(suggestAnswer, hint, SuggestionForm.MAX_ANSWER, false,
+                v -> suggestAnswer = v), fullMargins(3, 0, 3, 8));
+    }
+
+    private void addSuggestLines(LinearLayout root, String label, String hint) {
+        root.addView(suggestLabel(label));
+        EditText lines = suggestInput(suggestLines, hint, SuggestionForm.MAX_LINES, true, v -> suggestLines = v);
+        lines.setMinLines(4);
+        lines.setMaxLines(6);
+        root.addView(lines, fullMargins(3, 0, 3, 8));
     }
 
     private TextView suggestLabel(String value) {
@@ -4365,16 +4444,46 @@ public class MainActivity extends Activity {
         return input;
     }
 
+    /** Non-empty, trimmed lines of a multi-line answer. */
+    private static List<String> suggestLineList(String text) {
+        List<String> out = new ArrayList<>();
+        for (String line : text.split("\n")) {
+            if (!line.trim().isEmpty()) out.add(line.trim());
+        }
+        return out;
+    }
+
     private void sendSuggestion() {
+        final int type = suggestType;
+        List<String> lines = suggestLineList(suggestLines);
+        String question = suggestQuestion.trim();
+        String answer = suggestAnswer.trim();
         String problem = null;
-        if (suggestCategory < 0) problem = "Διάλεξε κατηγορία";
+        if (type == SuggestionForm.CLASSIC && suggestCategory < 0) problem = "Διάλεξε κατηγορία";
         else if (suggestDifficulty < 0) problem = "Διάλεξε δυσκολία";
-        else if (suggestQuestion.trim().length() < 10) problem = "Γράψε την ερώτηση";
-        else if (suggestAnswer.trim().isEmpty()) problem = "Γράψε την απάντηση";
+        else if (type <= SuggestionForm.RANK && question.length() < 10) problem = "Γράψε την ερώτηση";
+        else if (type == SuggestionForm.CLASSIC && answer.isEmpty()) problem = "Γράψε την απάντηση";
+        else if (type == SuggestionForm.TOP5 && lines.size() != 5) problem = "Γράψε ακριβώς 5 απαντήσεις, μία σε κάθε γραμμή";
+        else if (type == SuggestionForm.FIND3 && lines.size() < 3) problem = "Γράψε τουλάχιστον 3 σωστές απαντήσεις, μία σε κάθε γραμμή";
+        else if (type == SuggestionForm.RANK && (lines.size() < 4 || lines.size() > 5)) problem = "Γράψε 4 ή 5 στοιχεία με τη σωστή σειρά, ένα σε κάθε γραμμή";
+        else if (type == SuggestionForm.CONNECTION && (lines.size() < 3 || lines.size() > 5)) problem = "Γράψε 3 έως 5 στοιχεία, ένα σε κάθε γραμμή";
+        else if (type == SuggestionForm.CONNECTION && answer.isEmpty()) problem = "Γράψε τι συνδέει τα στοιχεία";
+        else if (type >= SuggestionForm.PERSON && answer.isEmpty()) problem = type == SuggestionForm.PERSON ? "Γράψε το πρόσωπο" : "Γράψε τη χώρα";
+        else if (type >= SuggestionForm.PERSON && (suggestClues[0].trim().isEmpty() || suggestClues[1].trim().isEmpty() || suggestClues[2].trim().isEmpty())) problem = "Γράψε και τα 3 στοιχεία";
         if (problem != null) { Toast.makeText(this, problem, Toast.LENGTH_SHORT).show(); return; }
 
-        android.net.Uri uri = SuggestionForm.prefilledUri(CATEGORIES[suggestCategory].name,
-                SuggestionForm.DIFFICULTIES[suggestDifficulty], suggestQuestion, suggestAnswer, suggestSource, suggestName);
+        // Types without a question of their own get the prompt the game shows.
+        if (type == SuggestionForm.CONNECTION) question = "Τι συνδέει τα παρακάτω;";
+        else if (type == SuggestionForm.PERSON) question = "Ποιο πρόσωπο ψάχνουμε;";
+        else if (type == SuggestionForm.COUNTRY) question = "Ποια χώρα ψάχνουμε;";
+        String linesText = type >= SuggestionForm.PERSON
+                ? suggestClues[0].trim() + "\n" + suggestClues[1].trim() + "\n" + suggestClues[2].trim()
+                : (type == SuggestionForm.CLASSIC ? "" : TextUtils.join("\n", lines));
+        String category = type == SuggestionForm.CLASSIC ? CATEGORIES[suggestCategory].name : "";
+        if (type != SuggestionForm.CLASSIC && type != SuggestionForm.CONNECTION && type < SuggestionForm.PERSON) answer = "";
+
+        android.net.Uri uri = SuggestionForm.prefilledUri(type, category,
+                SuggestionForm.DIFFICULTIES[suggestDifficulty], question, answer, linesText, suggestSource, suggestName);
         if (uri == null) {
             Toast.makeText(this, "Οι προτάσεις δεν είναι ακόμη διαθέσιμες", Toast.LENGTH_LONG).show();
             return;
@@ -4399,7 +4508,8 @@ public class MainActivity extends Activity {
         root.addView(again, fullMargins(4, 0, 4, 10));
         Button next = primaryButton("ΝΕΑ ΠΡΟΤΑΣΗ", ORANGE);
         next.setOnClickListener(v -> {
-            suggestQuestion = ""; suggestAnswer = ""; suggestSource = "";
+            suggestQuestion = ""; suggestAnswer = ""; suggestLines = ""; suggestSource = "";
+            suggestClues[0] = ""; suggestClues[1] = ""; suggestClues[2] = "";
             showSuggestQuestion();
         });
         root.addView(next, fullMargins(2, 0, 2, 10));
