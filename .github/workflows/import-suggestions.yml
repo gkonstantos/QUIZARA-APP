@@ -8,7 +8,9 @@ name: Import approved suggestions
 #   PREVIEW_KEYSTORE_B64   development/preview.keystore in base64, so the APK updates installed copies
 on:
   schedule:
-    - cron: '0 3 * * *'      # 03:00 UTC, 05:00/06:00 in Greece
+    # 02:47 UTC, 04:47/05:47 in Greece. Not on the hour: GitHub delays and can drop scheduled
+    # runs at the start of each hour, which is what happened to the first 03:00 run.
+    - cron: '47 2 * * *'
   workflow_dispatch:
 
 permissions:

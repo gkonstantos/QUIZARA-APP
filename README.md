@@ -148,7 +148,7 @@ none set, the screen shows that suggestions are not available yet.
 
 #### Daily import
 
-A GitHub Actions job (`.github/workflows/import-suggestions.yml`) does this every day at 03:00 UTC,
+A GitHub Actions job (`.github/workflows/import-suggestions.yml`) does this every day at 02:47 UTC (04:47 in Greece, 05:47 in summer),
 so approving a row in the sheet is enough. It downloads the sheet and runs the importer with
 `--update`, which keeps the questions already in the app and replaces only the suggested ones
 (ids `suggestion_N`, N = the sheet row) with the approved rows. So an edited row is updated and a
