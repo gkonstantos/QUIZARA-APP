@@ -114,6 +114,10 @@ pip install openpyxl
 python tools/import_question_workbooks.py   --classic  "OLES OI KLASIKES KATHGORIES.xlsm"   --sudden   "QUIZARA_Xafnikos_Thanatos_Extra_Skalotika_Mandela.xlsx"   --specials "QUIZARA_SPECIAL_6_KATIGORIES_POP_GOSSIP_EMPLOUTISMENO.xlsx"
 ```
 
+A workbook can also be given on its own, for example only `--specials "QUIZARA_SPECIAL_διορθωμένο.xlsx"`:
+the modes without a workbook keep the questions already in the app, and approved player
+suggestions already in a file stay in it.
+
 Then rebuild. The workbooks need these sheets:
 
 - **Classic** (also fills the Σπέσιαλ board): *Γεωγραφία, Ιστορία, Τέχνη, Αθλητικά, Γενικές,
@@ -185,6 +189,11 @@ tools/bump_version.py                      raises versionCode/versionName (used 
 ```
 
 ## Version
+
+**0.13.3** (version code 54): Specials replaced by the finally reviewed workbook
+(`QUIZARA_SPECIAL_διορθωμένο.xlsx`): 2,629 questions (Top 5 303, Βρες 3 537, Βάλ' τα σε σειρά 350,
+Βρες τη σύνδεση 426, Person ID 598, Country ID 415), all of them in the game. Classic and Sudden
+Death questions are unchanged.
 
 **0.13.0** (version code 51): suggestions can be of any kind (the six Special kinds as well as
 classic), and approved ones are imported into the matching bank. On the suggestion screen the title

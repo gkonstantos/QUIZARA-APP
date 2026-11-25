@@ -8,7 +8,9 @@ Usage (from the project root):
     python tools/import_question_workbooks.py --update --suggestions "Quizara προτάσεις (Responses).xlsx"
 
 Each workbook is the complete set for its modes; it replaces what is in
-app/src/main/assets:
+app/src/main/assets. Workbooks can be given on their own (e.g. only --specials): the modes without
+a workbook keep the app's current questions. Approved player suggestions already in a file are kept
+when it is rebuilt without --suggestions.
   --classic   6 category sheets      -> classic_questions.json and questions.json (Σπέσιαλ board)
   --sudden    5 Sudden Death sheets  -> sudden_death.json
   --specials  6 Special sheets       -> duel_specials.json
@@ -458,24 +460,42 @@ def check(classic, duel, sudden, specials):
     return problems
 
 
-def update_existing(suggestions):
-    """--update: keep the app's questions from the workbooks and replace only the suggested ones
-    with the sheet's approved rows (so edited rows change and rows no longer approved go away)."""
-    def load(name):
-        with open(os.path.join(ASSETS, name), encoding='utf-8') as f:
-            return json.load(f)
+def load_asset(name):
+    with open(os.path.join(ASSETS, name), encoding='utf-8') as f:
+        return json.load(f)
 
-    def from_workbooks(q):
-        return not q['id'].startswith('suggestion_')
 
-    classic = [q for q in load('classic_questions.json') if from_workbooks(q)]
+def suggested(q):
+    return q['id'].startswith('suggestion_')
+
+
+def kept_classic(suggestions):
+    """Classic questions kept from the app's file. With a suggestions sheet, the suggested ones are
+    replaced by the sheet's approved rows (so edited rows change and rows no longer approved go away)."""
+    classic = load_asset('classic_questions.json')
+    if suggestions is None:
+        return classic, duel_of(classic), []
+    classic = [q for q in classic if not suggested(q)]
     dd = Dedupe('classic')
     for q in classic:
         dd.add(q['question'], norm(q['answer']), q['id'])
     add_classic_suggestions(classic, {q['id'] for q in classic}, dd, suggestions)
-    specials = [q for q in load('duel_specials.json') if from_workbooks(q)]
+    return classic, duel_of(classic), dd.dropped
+
+
+def kept_specials(suggestions):
+    """Specials kept from the app's file, with the suggested ones refreshed as in kept_classic."""
+    specials = load_asset('duel_specials.json')
+    if suggestions is None:
+        return specials
+    specials = [q for q in specials if not suggested(q)]
     add_special_suggestions(specials, {q['id'] for q in specials}, suggestions)
-    return classic, duel_of(classic), dd.dropped, load('sudden_death.json'), specials
+    return specials
+
+
+def with_kept_suggestions(built, name):
+    """A file rebuilt from its workbook without a suggestions sheet keeps the suggestions already in it."""
+    return built + [q for q in load_asset(name) if suggested(q)]
 
 
 def main():
@@ -487,19 +507,28 @@ def main():
     ap.add_argument('--update', action='store_true',
                     help='only refresh the suggested questions in the existing files (needs --suggestions)')
     args = ap.parse_args()
-    if args.update and not args.suggestions:
-        ap.error('--update needs --suggestions')
-    if not args.update and not (args.classic and args.sudden and args.specials):
-        ap.error('--classic, --sudden and --specials are required (or use --update --suggestions)')
+    workbooks = args.classic or args.sudden or args.specials
+    if args.update and (workbooks or not args.suggestions):
+        ap.error('--update takes only --suggestions')
+    if not workbooks and not args.suggestions:
+        ap.error('give at least one of --classic, --sudden, --specials (or --update --suggestions)')
 
+    # Each mode comes from its workbook when one is given; otherwise the app's current file is kept.
     suggestions = suggestion_rows(args.suggestions) if args.suggestions else None
-    if args.update:
-        classic, duel, classic_dropped, sudden, specials = update_existing(suggestions)
-        skipped = {}
-    else:
+    if args.classic:
         classic, duel, classic_dropped = build_classic(args.classic, suggestions)
-        sudden = build_sudden(args.sudden)
+        if suggestions is None:
+            classic = with_kept_suggestions(classic, 'classic_questions.json')
+            duel = duel_of(classic)
+    else:
+        classic, duel, classic_dropped = kept_classic(suggestions)
+    sudden = build_sudden(args.sudden) if args.sudden else load_asset('sudden_death.json')
+    if args.specials:
         specials, skipped = build_specials(args.specials, suggestions)
+        if suggestions is None:
+            specials = with_kept_suggestions(specials, 'duel_specials.json')
+    else:
+        specials, skipped = kept_specials(suggestions), {}
     problems = check(classic, duel, sudden, specials)
     if problems:
         sys.exit('ERROR:\n  ' + '\n  '.join(problems))
