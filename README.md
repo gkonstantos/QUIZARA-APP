@@ -125,7 +125,7 @@ Then rebuild. The workbooks need these sheets:
 - **Sudden Death**: *ΣΩΣΤΟ_ΛΑΘΟΣ, ΠΟΛΛΑΠΛΗΣ, ΠΑΝΩ_ΚΑΤΩ, ΔΙΑΛΕΞΕ, ΠΙΟ_ΚΟΝΤΑ* with *ID, Ερώτηση,
   Επιλογή Α–Δ, Σωστή απάντηση, Αριθμητική απάντηση, Μονάδα, Αιτιολόγηση*.
 - **Specials**: *Top 5, Βρες 3, Βάλτα σε σειρά, Βρες τη σύνδεση, Person ID, Country ID*. Rows listed in
-  *ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ* and TOP 5 rows marked "Μετακινήθηκε στο τέλος" are left out of the game.
+  *ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ* (optional sheet) and TOP 5 rows marked "Μετακινήθηκε στο τέλος" are left out of the game.
 
 Repeated questions are dropped (same text and answer, or nearly the same text with the same
 answer). The script prints what it dropped and stops with an error if a mode would be left without

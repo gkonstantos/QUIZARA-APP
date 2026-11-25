@@ -347,8 +347,10 @@ def build_sudden(path):
 
 def build_specials(path, suggestions=None):
     excluded = collections.defaultdict(set)
-    for r in sheet_rows(path, 'ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ'):
-        excluded[text(r.get('Κατηγορία'))].add(text(r.get('ID')))
+    # Optional: a reviewed workbook may have dropped the list once nothing is left out of the game.
+    if 'ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ' in openpyxl.load_workbook(path, read_only=True).sheetnames:
+        for r in sheet_rows(path, 'ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ'):
+            excluded[text(r.get('Κατηγορία'))].add(text(r.get('ID')))
     out, used, skipped = [], set(), collections.Counter()
 
     def explanation(v):
