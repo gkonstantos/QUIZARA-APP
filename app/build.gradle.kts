@@ -10,8 +10,8 @@ android {
         applicationId = "com.monomaxia.gnoseon.preview"
         minSdk = 23
         targetSdk = 36
-        versionCode = 54
-        versionName = "0.13.3"
+        versionCode = 55
+        versionName = "0.13.4"
     }
 
     // Reuse the original Preview signing certificate so a new installation

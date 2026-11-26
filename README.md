@@ -190,6 +190,11 @@ tools/bump_version.py                      raises versionCode/versionName (used 
 
 ## Version
 
+**0.13.4** (version code 55): Sudden Death replaced by the finally reviewed workbook
+(`QUIZARA_Xafnikos_Thanatos_διορθωμένο.xlsx`): 1,023 questions (Σωστό/Λάθος 257, Πολλαπλής 211,
+Πάνω/Κάτω 198, Διάλεξε 170, Πιο κοντά 187); the previous 1,116 are gone. Classic and Specials are
+unchanged.
+
 **0.13.3** (version code 54): Specials replaced by the finally reviewed workbook
 (`QUIZARA_SPECIAL_διορθωμένο.xlsx`): 2,629 questions (Top 5 303, Βρες 3 537, Βάλ' τα σε σειρά 350,
 Βρες τη σύνδεση 426, Person ID 598, Country ID 415), all of them in the game. Classic and Sudden
