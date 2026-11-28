@@ -150,16 +150,18 @@ repeat an existing question, or miss a field their kind needs, are dropped. The
 form's address and field numbers are set in `SuggestionForm.java` (see the comment there); with
 none set, the screen shows that suggestions are not available yet.
 
-#### Daily import
+#### Suggestions import
 
-A GitHub Actions job (`.github/workflows/import-suggestions.yml`) does this every day at 02:47 UTC (04:47 in Greece, 05:47 in summer),
-so approving a row in the sheet is enough. It downloads the sheet and runs the importer with
+A GitHub Actions job (`.github/workflows/import-suggestions.yml`) does this every 5 days (the 1st,
+6th, 11th, 16th, 21st, 26th and 31st of each month) at 02:47 UTC (04:47 in Greece, 05:47 in summer),
+so approving a row in the sheet is enough; it reaches the app within 5 days. It downloads the sheet and runs the importer with
 `--update`, which keeps the questions already in the app and replaces only the suggested ones
 (ids `suggestion_N`, N = the sheet row) with the approved rows. So an edited row is updated and a
 row whose `ναι` is removed goes away again. If anything changed, the job raises the version
 (0.13.0 → 0.13.1), builds the APK, commits to `main` and publishes the APK as a GitHub release.
-Days with nothing new produce nothing. It can also be started by hand from the Actions tab
-(*Import approved suggestions* → *Run workflow*).
+Runs with nothing new produce nothing. It can also be started by hand from the Actions tab
+(*Import approved suggestions* → *Run workflow*). GitHub turns scheduled jobs off after 60 days
+without commits to the repository; turn it back on from the same page.
 
 Setup, once (repository *Settings → Secrets and variables → Actions → New repository secret*):
 
@@ -183,9 +185,9 @@ app/src/main/assets/                       question banks (JSON)
 app/src/main/res/                          posters, logos, sounds, launcher icons, theme
 tools/import_question_workbooks.py         Excel workbooks → question JSON
 build-preview.sh                           Gradle-free build script
-tools/bump_version.py                      raises versionCode/versionName (used by the daily job)
+tools/bump_version.py                      raises versionCode/versionName (used by the suggestions job)
 .github/workflows/build-apk.yml            CI build that produces the APK
-.github/workflows/import-suggestions.yml   daily import of approved suggestions + release
+.github/workflows/import-suggestions.yml   import of approved suggestions every 5 days + release
 ```
 
 ## Version

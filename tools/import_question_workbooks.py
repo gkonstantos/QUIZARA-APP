@@ -19,7 +19,7 @@ when it is rebuilt without --suggestions.
               or, for the other kinds, to the Specials.
   --update    no workbooks needed: keep the questions already in the assets and only replace the
               suggested ones (ids "suggestion_N", N = sheet row) with the sheet's approved rows.
-              The daily GitHub job (.github/workflows/import-suggestions.yml) runs this.
+              The GitHub job .github/workflows/import-suggestions.yml runs this every 5 days.
 
 Rows the reviewers took out are skipped (the specials workbook's "ΑΔΙΚΑ_ΔΥΣΚΟΛΕΣ_ΕΛΕΓΧΟΣ" list and
 TOP 5 rows "moved out of the pool"). Repeated questions are dropped: same text and answer, or nearly

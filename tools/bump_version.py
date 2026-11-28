@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Raise the app's version by one: versionCode + 1 and the last part of versionName + 1
-(0.13.0 -> 0.13.1). Prints the new versionName. Used by the daily suggestions job."""
+(0.13.0 -> 0.13.1). Prints the new versionName. Used by the suggestions import job."""
 import os
 import re
 

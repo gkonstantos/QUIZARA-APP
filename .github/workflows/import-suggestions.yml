@@ -1,16 +1,17 @@
 name: Import approved suggestions
 
-# Once a day: read the players' suggestions sheet, put the rows marked "ναι" in Εγκρίθηκε into the
+# Every 5 days: read the players' suggestions sheet, put the rows marked "ναι" in Εγκρίθηκε into the
 # question files, and if anything changed, raise the version, build the APK, commit and publish it
-# as a GitHub release. Needs two repository secrets (see README, "Daily import"):
+# as a GitHub release. Needs two repository secrets (see README, "Suggestions import"):
 #   SUGGESTIONS_SHEET_ID   the id in the sheet's address (.../spreadsheets/d/<id>/edit); the sheet
 #                          must be shared as "anyone with the link can view"
 #   PREVIEW_KEYSTORE_B64   development/preview.keystore in base64, so the APK updates installed copies
 on:
   schedule:
-    # 02:47 UTC, 04:47/05:47 in Greece. Not on the hour: GitHub delays and can drop scheduled
-    # runs at the start of each hour, which is what happened to the first 03:00 run.
-    - cron: '47 2 * * *'
+    # 02:47 UTC (04:47/05:47 in Greece) on the 1st, 6th, 11th, 16th, 21st, 26th and 31st of each
+    # month. Not on the hour: GitHub delays and can drop scheduled runs at the start of each hour,
+    # which is what happened to the first 03:00 run.
+    - cron: '47 2 */5 * *'
   workflow_dispatch:
 
 permissions:
