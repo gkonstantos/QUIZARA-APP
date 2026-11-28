@@ -41,10 +41,10 @@ the questions aloud. It works fully offline: no account, no ads, no permissions.
 ### Questions included
 | Set | Questions |
 |---|---|
-| Classic / 4 Τυριά | 5,933 |
-| Σπέσιαλ board | 5,933 |
-| Σπέσιαλ Specials | 2,994 |
-| Sudden Death | 1,116 |
+| Classic / 4 Τυριά | 5,693 |
+| Σπέσιαλ board | 5,693 |
+| Σπέσιαλ Specials | 2,629 |
+| Sudden Death | 1,023 |
 
 ### Also
 - **Διπλασιασμός (×2)**: in Σπέσιαλ each team can double the value of one question per game.
@@ -189,6 +189,11 @@ tools/bump_version.py                      raises versionCode/versionName (used 
 ```
 
 ## Version
+
+**0.13.5** (version code 56): classic questions replaced by the finally reviewed workbook
+(`OLES OI KLASIKES KATHGORIES_διορθωμένο.xlsx`): 5,693 questions (Γεωγραφία 868, Ιστορία 906,
+Τέχνη 1,174 with 99 new book questions, Αθλητικά 811, Γενικές 1,029, Επιστήμη 905); the previous
+5,933 are gone. The Σπέσιαλ board uses the same 5,693. Sudden Death and Specials are unchanged.
 
 **0.13.4** (version code 55): Sudden Death replaced by the finally reviewed workbook
 (`QUIZARA_Xafnikos_Thanatos_διορθωμένο.xlsx`): 1,023 questions (Σωστό/Λάθος 257, Πολλαπλής 211,
