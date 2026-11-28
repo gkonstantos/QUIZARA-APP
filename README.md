@@ -104,6 +104,38 @@ Debug builds are signed with `development/preview.keystore` when that file is pr
 update an existing Quizara preview install. The file is deliberately **not** in git; without it,
 builds use the standard Android debug key. Neither key may be used for a Play Store release.
 
+## Play Store release
+
+The Play Store app is `com.monomaxia.gnoseon`; debug builds add `.preview`, so the preview APK
+(`com.monomaxia.gnoseon.preview`) stays a separate app and keeps updating existing installs. Release
+builds are signed with the **upload key**, which is not in git.
+
+Create the upload key once (it asks for a password and your name), from the project folder in
+PowerShell:
+
+```powershell
+& "C:\Program Files\Java\jdk-17.0.2\bin\keytool.exe" -genkeypair -v -keystore development\quizara-upload.jks -alias quizara-upload -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Then copy `keystore.properties.example` to `keystore.properties` and fill in the passwords. Keep a
+copy of `development\quizara-upload.jks` and the passwords somewhere safe outside this folder: every
+update has to be signed with this key (with Play App Signing a lost upload key can be reset through
+Google support, but that takes days).
+
+Build the bundle to upload:
+
+```powershell
+.\gradlew.bat :app:bundleRelease
+```
+
+The file is `app\build\outputs\bundle\release\app-release.aab`. Each upload needs a higher
+`versionCode` than the last one (`python tools/bump_version.py`).
+
+`play-store/` holds the store texts, the answers for the App content forms (`listing.md`), the
+512 × 512 icon and the 1024 × 500 feature graphic. The privacy policy is `docs/privacy/index.html`,
+published with GitHub Pages (Settings → Pages → Deploy from branch `main`, folder `/docs`) at
+https://gkonstantos.github.io/QUIZARA-APP/privacy/.
+
 ## Editing the questions
 
 The four files in `app/src/main/assets/` are generated from three reviewed Excel workbooks. Each
